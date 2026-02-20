@@ -8,97 +8,29 @@ from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from sbx.sac.policies import SACPolicy
 from sbx.common.type_aliases import RLTrainState
 from sbx import SAC
-from typing import Any, TypeVar, ClassVar
+from typing import TypeVar, ClassVar
 from functools import partial
-from flax import struct
 import warnings
 try: 
     from discrete_policy import SAC_DPolicy, DiscreteDistributionalVectorCritic
     from record_utils import *
     from env import *
     from buffer import *
+    from SAC_common import *
 except:
     from .discrete_policy import SAC_DPolicy, DiscreteDistributionalVectorCritic
     from .record_utils import *
     from .env import *
     from .buffer import *
+    from .SAC_common import *
 
 from jax import lax
-from sbx.common.type_aliases import ReplayBufferSamplesNp, RLTrainState
+from sbx.common.type_aliases import RLTrainState
 import time
 from flax import serialization
 
 warnings.filterwarnings("ignore")
 SelfOffPolicyAlgorithm = TypeVar("SelfOffPolicyAlgorithm", bound="OffPolicyAlgorithm")
-
-@struct.dataclass
-class Carry():
-    step_carry: StepCarry
-    env_rec: EnvRecord
-    it : int = 0
-    optionnal_arr: jax.Array = None
-    latency_manager: JaxLatencyEnv = None
-       
-@struct.dataclass
-class CarryInit():
-    tmp_buffer: jax.Array 
-    timestep : jax.Array
-    timestep_entry: jax.Array
-    state: jax.Array
-    current_obs: jax.Array
-    key: jax.Array
-    curve: jax.Array
-
-@struct.dataclass
-class SACarry():
-    env : EnvDataBinance
-    env_test: EnvDataBinance
-    buffer : CustomBufferBis
-    qf_state : RLTrainState
-    actor_state : TrainState
-    ent_coef_state : TrainState
-    n_updates : int
-    key: jax.Array
-    
-    env_rec: EnvRecord
-    loss_rec: LossRecord
-    test_rec: TestRecord
-    latency_manager: JaxLatencyEnv
-
-    std: jax.Array
-    entropy: float
-    
-@struct.dataclass
-class EvalCarry():
-    current_obs : jax.Array
-    is_done : bool
-    timestep : int
-    timestep_entry : int
-    curve : jax.Array
-    state : float
-    reward_arr : jax.Array
-    length_arr : jax.Array
-    pf_arr : jax.Array
-    cum_reward : float
-    length : int 
-    pf_val: float
-    actor_state : TrainState
-    env : EnvDataBinance
-    key: jax.Array
-
-@partial(jax.jit, static_argnames = ["max_latency", "buffer_shape", "ep_length"], donate_argnames=["tmp_buffer", "env_rec", "step_carry", "latency_manager"])
-def on_done_processor(tmp_buffer, env_rec, step_carry, latency_manager, reset_key, 
-                     tmp_buffer_pos, max_latency, buffer_shape, init_pos, ep_length, env):
-    
-    tmp_buffer = erase_coming_obs(tmp_buffer, tmp_buffer_pos + 1, max_latency, buffer_shape)
-    tmp_buffer = erase_first_obs(tmp_buffer, tmp_buffer_pos, max_latency, buffer_shape, init_pos, ep_length)
-    
-    env_rec = update_env_rec(env_rec, step_carry.timestep, step_carry.pf_value)
-    step_carry = reset_step_carry(env, reset_key)
-    latency_manager, _, _ = reset_latency_env(latency_manager, step_carry.current_obs)
-    
-    
-    return tmp_buffer, env_rec, step_carry, latency_manager
 
 class DADAC_JAX(SAC):
     
@@ -107,20 +39,21 @@ class DADAC_JAX(SAC):
         "DiscretePolicy": SAC_DPolicy
     }
     
-    def __init__(self, policy, foolish_env, env, env_rec, latency_manager: JaxLatencyEnv, latency_manager_test: JaxLatencyEnv,buffer : CustomBufferLatency, learning_rate = 0.0003, 
+    def __init__(self, policy, env: EnvDataBinance, env_rec, latency_manager: JaxLatencyEnv, latency_manager_test: JaxLatencyEnv,buffer : CustomBufferLatency, learning_rate = 0.0003, 
                  qf_learning_rate = None, buffer_size = 1000000, learning_starts = 100, 
                  batch_size = 256, tau = 0.005, gamma = 0.99, train_freq = 1, gradient_steps = 1, policy_delay = 1, action_noise = None, 
                  replay_buffer_class = None, replay_buffer_kwargs = None, n_steps = 1, ent_coef = "auto", target_entropy = "auto", 
                  use_sde = False, sde_sample_freq = -1, use_sde_at_warmup = False, stats_window_size = 100, tensorboard_log = None, 
                  policy_kwargs = None, param_resets = None, verbose = 0, seed = None, device = "auto", _init_setup_model = True,
-                 learning_rate_alpha = 3e-4, alpha_0 = 0.2):
+                 learning_rate_alpha = 3e-4, alpha_0 = 0.2, n_episodes_warmup = 3 * 10**2, n_training_warmup = 10**5):
         
         if policy_kwargs == None:
             policy_kwargs = {"action_dim": env.action_length, "vector_critic_class": DiscreteDistributionalVectorCritic}
         else:
             policy_kwargs.update({"action_dim": env.action_length, "vector_critic_class": DiscreteDistributionalVectorCritic})
         
-        super().__init__(policy, foolish_env, learning_rate, qf_learning_rate, buffer_size, learning_starts, batch_size, tau, gamma, train_freq, 
+        replacement_env = foolish_env(env.obs_length, env.action_length)
+        super().__init__(policy, replacement_env, learning_rate, qf_learning_rate, buffer_size, learning_starts, batch_size, tau, gamma, train_freq, 
                          gradient_steps, policy_delay, action_noise, replay_buffer_class, replay_buffer_kwargs, n_steps, ent_coef, 
                          target_entropy, use_sde, sde_sample_freq, use_sde_at_warmup, stats_window_size, tensorboard_log, policy_kwargs, 
                          param_resets, verbose, seed, device, _init_setup_model)
@@ -129,7 +62,6 @@ class DADAC_JAX(SAC):
         self.env_rec = env_rec
         self.buffer = buffer
         
-        self.key, ent_key = jax.random.split(self.key, 2)
         params = {"log_ent_coef": jnp.log(alpha_0)}
         self.ent_coef_state = TrainState.create(
                 apply_fn=self.ent_coef.apply,
@@ -143,13 +75,14 @@ class DADAC_JAX(SAC):
         self.latency_manager = latency_manager
         self.latency_manager_test = latency_manager_test
         self.start_std, self.start_entropy = jnp.ones((2, self.action_dim)), 0.5 * target_entropy
+        self.n_episodes_warmup, self.n_training_warmup = n_episodes_warmup, n_training_warmup
 
 
     @classmethod
-    @partial(jax.jit, static_argnames = ["cls","n_episodes", "n_networks_training", "act_dim", "tau", "batch_size", "max_latency", "obs_dim"], 
+    @partial(jax.jit, static_argnames = ["cls","n_episodes", "n_networks_training", "act_dim", "tau", "batch_size", "obs_dim"], 
              donate_argnames = ["env", "actor_state", "qf_state"])
-    def rollout_warmup(cls, env: EnvDataBinance, n_episodes, n_networks_training, actor_state, qf_state, ent_coef_state, act_dim, tau, batch_size, past_entropy, max_latency, obs_dim, past_std,
-                       discounts, latency_probs):
+    def rollout_warmup(cls, env: EnvDataBinance, n_episodes, n_networks_training, actor_state, qf_state, act_dim, tau, batch_size, past_entropy, obs_dim, past_std,
+                       discounts):
         step_carry = env.step_carry
         
         def run_one_ep(carry, items):
@@ -189,7 +122,6 @@ class DADAC_JAX(SAC):
             qf_state = carry[0]
             actor_state = carry[1]
             past_std = carry[2]
-            past_entropy = carry[3]
 
             idx_sampling = jax.random.randint(key, shape = (batch_size), minval= 0 , maxval=max_pos)
             
@@ -202,23 +134,18 @@ class DADAC_JAX(SAC):
             
             (
                 qf_state,
-                (qf_loss_value, ent_coef_value, Q_mean, new_std),
+                (qf_loss_value, Q_mean, new_std),
                 key,
-            ) = cls.warmup_train_critic(actor_state, qf_state, ent_coef_state, batch_obs,
+            ) = cls.warmup_train_critic(actor_state, qf_state, batch_obs,
                                     batch_actions, batch_next_obs, batch_rewards,
                                     batch_dones, discounts, key, act_dim, 
-                                    max_latency, past_std, tau, latency_probs, 
-                                    past_entropy)
+                                    past_std, tau)
             qf_state = cls.soft_update(tau, qf_state)
 
-            (actor_state, qf_state, actor_loss_value, key, entropy) = cls.warmup_update_actor(
+            (actor_state, qf_state, actor_loss_value, entropy) = cls.warmup_update_actor(
                 actor_state,
                 qf_state,
-                ent_coef_state,
                 batch_obs,
-                key,
-                act_dim,
-                past_entropy, 
                 batch_actions
             )
             
@@ -234,154 +161,16 @@ class DADAC_JAX(SAC):
             )
 
         return env, actor_state, qf_state, past_std, entropy, rec_losses, transition_buffer, max_pos
-
-    @staticmethod
-    @partial(jax.jit, static_argnames = ["n_steps", "buffer_shape"], donate_argnames = ["env", "tmp_buffer", "env_rec"])
-    def rollout(env: EnvDataBinance, n_steps, buffer_shape, actor_state, env_rec: EnvRecord, latency_manager: JaxLatencyEnv, tmp_buffer, buf_pos, buf_pos_init, full):
-
-        max_latency = latency_manager.buffer_length // 2
-        step_carry = env.step_carry
-
-        keys = jax.random.split(env.key, 1 + n_steps + 1)
-        key, all_keys, reset_key = keys[0], keys[1:-1], keys[-1]
-
-        def scan_body(items, keys_for_step):
-            tmp_buffer = items[0]
-            tmp_buffer_pos = items[1]
-            init_pos = items[2]
-            step_carry = items[3]
-            current_obs = step_carry.current_obs
-            env_rec = items[4]
-            latency_manager = items[5]
-            past_done = items[6]
-            full = items[7]
-            
-            sample_key = keys_for_step
-
-            dist = actor_state.apply_fn(actor_state.params, current_obs)
-            action = jax.lax.select(latency_manager.carry.do_action, dist.sample(1, seed = sample_key)[0], latency_manager.carry.past_action)
-            
-            new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, action)
-            done_or_trunc = jnp.logical_or(done, truncated)
-
-            latency_manager, return_arr, mask_return_arr, n_iterations = step_latency_env(latency_manager, current_obs, new_obs, action, reward, done_or_trunc, past_done)
-
-            tmp_buffer = update_latency_buffer(tmp_buffer, tmp_buffer_pos, max_latency, buffer_shape, mask_return_arr, return_arr, 2*max_latency)
-            env_rec = env_rec.replace(cumulated_reward = env_rec.cumulated_reward + reward[0] * (1-past_done))
-                        
-            past_begin_pos = jnp.where(done_or_trunc | past_done, (tmp_buffer_pos + latency_manager.carry.n_iter_mask - max_latency*(1-past_done) ) % tmp_buffer.shape[0], init_pos) 
-            full = jnp.logical_or(tmp_buffer_pos + latency_manager.carry.n_iter_mask - max_latency*done_or_trunc*(1-past_done) >= tmp_buffer.shape[0] , full )
-            pos = (tmp_buffer_pos + latency_manager.carry.n_iter_mask - max_latency*done_or_trunc*(1-past_done) ) % tmp_buffer.shape[0]
-        
-            return (tmp_buffer, pos, past_begin_pos, step_carry, env_rec, latency_manager, done_or_trunc | past_done, full), None
-        
-        (tmp_buffer, pos, init_pos, step_carry, env_rec, latency_manager, done_or_trunc, full), _ = lax.scan(scan_body, 
-                                                                                                             (tmp_buffer, buf_pos, buf_pos_init, step_carry, env_rec, latency_manager, False, full), 
-                                                                                                             all_keys, 
-                                                                                                             unroll=2)
-        
-        tmp_buffer, env_rec, step_carry, latency_manager = jax.lax.cond(
-                done_or_trunc,
-                lambda tb, er, sc, lm: on_done_processor(tb, er, sc, lm, reset_key, 
-                                                       pos + max_latency, max_latency, buffer_shape, buf_pos_init, env.ep_length, env), #new_init_pos
-                lambda tb, er, sc, lm: (tb, er, sc, lm),
-                tmp_buffer, env_rec, step_carry, latency_manager
-            )
-        
-        env = env.replace(
-                step_carry = step_carry,
-                key = key
-            )
-        return env, env_rec, latency_manager, tmp_buffer, pos, init_pos, full
-    
-    @staticmethod
-    @partial(jax.jit, static_argnames = ["n_steps", "buffer_shape"], donate_argnames = ["env", "buffer", "env_rec"])
-    def rollout_past(env: EnvDataBinance, buffer: CustomBufferBis, n_steps, buffer_shape, actor_state, env_rec: EnvRecord, latency_manager: JaxLatencyEnv):
-
-        max_latency = latency_manager.buffer_length // 2
-
-        tmp_buffer = jnp.zeros((n_steps * latency_manager.buffer_length, max_latency, buffer_shape) , dtype=jnp.float32)
-        
-        step_carry = env.step_carry
-
-        carry = Carry(tmp_buffer=tmp_buffer, key = env.key, step_carry = step_carry, env_rec=env_rec, latency_manager=latency_manager)
-
-        def body_fun(i, carry: Carry):
-        
-            tmp_buffer = carry.tmp_buffer
-            key = carry.key
-            step_carry = carry.step_carry
-            current_obs = step_carry.current_obs
-            env_rec = carry.env_rec
-            latency_manager = carry.latency_manager
-            
-            key, sample_key, reset_key = jax.random.split(key, 3)
-
-            def true_fun(action, current_obs):
-                dist = actor_state.apply_fn(actor_state.params, current_obs)
-                return dist.sample(1, seed = sample_key)[0]
-            def false_fun(action, current_obs):
-                return action
-            
-            action = jax.lax.cond(latency_manager.carry.do_action, true_fun, false_fun, latency_manager.carry.past_action, current_obs)
-            
-            new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, action)
-            done_or_trunc = jnp.logical_or(done, truncated)
-
-            latency_manager, return_arr, mask_return_arr, n_iterations = step_latency_env(latency_manager, current_obs, new_obs, action, reward, done_or_trunc)
-            
-            slice = jnp.where(mask_return_arr[:, None], return_arr, lax.dynamic_slice(tmp_buffer[:, max_latency, :], (carry.tmp_buffer_pos, 0), (latency_manager.buffer_length, buffer_shape)))
-            tmp_buffer = update_latency_buffer(tmp_buffer, carry.tmp_buffer_pos, slice, max_latency, buffer_shape)
-
-            tmp_buffer = jax.lax.cond(done_or_trunc, lambda*_: erase_coming_obs(tmp_buffer, carry.tmp_buffer_pos + 1, max_latency, buffer_shape), 
-                                      lambda *_: tmp_buffer)
-       
-            env_rec = env_rec.replace(cumulated_reward = env_rec.cumulated_reward + reward[0])
-            env_rec = jax.lax.cond(done_or_trunc, 
-                                   update_env_rec, 
-                                   lambda *_: env_rec, 
-                                   env_rec, step_carry.timestep, step_carry.pf_value)
-            
-            step_carry = jax.lax.cond(done_or_trunc, 
-                                lambda *_: reset_step_carry(env, reset_key),
-                                lambda *_: (step_carry), 
-                                env, step_carry, reset_key)
-            
-            latency_manager, _, _ = jax.lax.cond(done_or_trunc,
-                                          lambda *_: reset_latency_env(latency_manager, step_carry.current_obs),
-                                          lambda *_: (latency_manager, jnp.zeros_like(latency_manager.carry.buffer_latency), jnp.zeros_like(latency_manager.carry.mask_return)),
-                                          latency_manager, step_carry.current_obs)
-            
-            carry = carry.replace(tmp_buffer=tmp_buffer, key = key, step_carry = step_carry, it = carry.it + 1, env_rec = env_rec, 
-                                  latency_manager=latency_manager, tmp_buffer_pos = carry.tmp_buffer_pos + latency_manager.carry.n_iter_mask)
-            return carry
-        
-        carry = lax.fori_loop(0, n_steps, body_fun, carry)
-        
-        env_rec = env_rec.replace(pos = carry.env_rec.pos, cumulated_reward = carry.env_rec.cumulated_reward, buffer = carry.env_rec.buffer)
-        
-        mask_tmp_buffer = jnp.arange(n_steps * latency_manager.buffer_length) >= carry.tmp_buffer_pos
-        adaptated_tmp_buffer = jnp.where(mask_tmp_buffer[:, None, None], jax.lax.dynamic_slice(buffer.buffer, (buffer.pos, 0, 0), (n_steps * latency_manager.buffer_length, max_latency, buffer_shape)), carry.tmp_buffer)
-        buffer = buffer.replace(buffer = jax.lax.dynamic_update_slice(buffer.buffer, adaptated_tmp_buffer, (buffer.pos, 0, 0)), 
-                                pos = (buffer.pos + carry.tmp_buffer_pos)%buffer.buffer_size, 
-                                full = jnp.logical_or(buffer.pos + carry.tmp_buffer_pos >= buffer.buffer_size, buffer.full).astype(jnp.float32))
-        
-        env = env.replace(
-                step_carry = carry.step_carry,
-                key = carry.key
-            )
-        
-        return env, buffer, env_rec, carry.latency_manager
     
     @classmethod
     @partial(jax.jit, static_argnames = ["cls", "total_timesteps", "buffer_shape", "obs_dim", "act_dim", "gradient_steps", 
                                          "tau", "policy_delay", "batch_size", "collect_timesteps", "init_timesteps", 
-                                         "eval_freq", "n_eval", "target_entropy", "log_interval"], donate_argnames = ["buffer"])
+                                         "eval_freq", "n_eval", "target_entropy", "log_interval", "n_episodes_warmup", "n_networks_training_warmup"], donate_argnames = ["buffer"])
     def learning_wrapper(cls, total_timesteps, collect_timesteps, buffer_shape, env, eval_env, buffer: CustomBufferLatency, obs_dim, act_dim, gradient_steps, discounts,
                                  tau, target_entropy, policy_delay, batch_size, qf_state: RLTrainState, actor_state: TrainState, ent_coef_state: TrainState,
                                  key: jax.Array, init_timesteps, eval_freq: int, n_eval: int, log_interval: int, latency_manager: JaxLatencyEnv, 
                                  latency_manager_test: JaxLatencyEnv, start_std, start_entropy, 
-                                 n_episodes_warmup = 10**2 * 3, n_networks_training_warmup = 10**5):
+                                 n_episodes_warmup: int, n_networks_training_warmup: int):
         
         env_rec = EnvRecord(pos = 0, buffer=jnp.zeros(((init_timesteps + collect_timesteps * total_timesteps) // 10, 3), dtype=jnp.float32)) #10: empirical assumption that an env will last in mean at least 10 timesteps
     
@@ -389,17 +178,14 @@ class DADAC_JAX(SAC):
         
         
         env, actor_state, qf_state, start_std, start_entropy, rec_losses, transtion_buffer, max_pos = cls.rollout_warmup(env, n_episodes_warmup, n_networks_training_warmup, actor_state, 
-                                                                                              qf_state, ent_coef_state, act_dim, tau, batch_size, start_entropy, buffer.max_latency, obs_dim, 
-                                                                                              start_std, discounts, jnp.array(latency_manager.merged_dist.latency_probabilities), 
+                                                                                              qf_state, act_dim, tau, batch_size, start_entropy, obs_dim, 
+                                                                                              start_std, discounts
                                                                                               )
         
         
         buffer = buffer.replace(buffer = update_latency_buffer(buffer.buffer, buffer.pos, buffer.max_latency, buffer_shape,
                                                                jnp.arange(transtion_buffer.shape[0]) < max_pos, transtion_buffer, transtion_buffer.shape[0]), 
                                                                pos = max_pos, past_begin_pos = max_pos)
-        
-        env, env_rec, latency_manager, tmp_buf, buf_pos, buf_pos_init, full = cls.rollout(env, init_timesteps, buffer_shape, actor_state, env_rec, latency_manager, buffer.buffer, buffer.pos, buffer.past_begin_pos, buffer.full)
-        buffer = buffer.replace(buffer = tmp_buf, pos = buf_pos, past_begin_pos= buf_pos_init, full = full)
         
         key, test_key = jax.random.split(key)
 
@@ -408,7 +194,7 @@ class DADAC_JAX(SAC):
                               opt_ratio_mat = jnp.zeros((total_timesteps // eval_freq, n_eval)),key = test_key)
 
         
-        carry = SACarry(env = env, env_test = eval_env, buffer=buffer, qf_state= qf_state, actor_state= actor_state, ent_coef_state=ent_coef_state, n_updates=0, key = key, 
+        carry = SAC_Main_Carry(env = env, env_test = eval_env, buffer=buffer, qf_state= qf_state, actor_state= actor_state, ent_coef_state=ent_coef_state, n_updates=0, key = key, 
                         env_rec = env_rec, loss_rec = loss_rec, test_rec=test_rec, latency_manager=latency_manager, std= start_std, entropy= start_entropy) 
         
         num_outer_loops = total_timesteps // eval_freq
@@ -431,7 +217,6 @@ class DADAC_JAX(SAC):
             key = carry.key
             latency_manager = carry.latency_manager
             past_std = carry.std
-            past_entropy = carry.entropy
             
             data, key = buffer.sample(buffer.buffer, batch_size, buffer.pos, key, discounts, obs_dim, buffer.full, buffer.buffer_size, buffer.max_latency, latency_manager.action_dim)
             
@@ -450,8 +235,7 @@ class DADAC_JAX(SAC):
             ) = cls.update_critic(actor_state, qf_state, ent_coef_state, batch_obs,
                                     batch_actions, batch_next_obs, batch_rewards,
                                     batch_dones, batch_discounts, key, act_dim, 
-                                    buffer.max_latency, past_std, tau, batch_latencies, 
-                                    past_entropy)
+                                    buffer.max_latency, past_std, tau, batch_latencies)
             qf_state = cls.soft_update(tau, qf_state)
 
             carry = carry.replace(qf_state = qf_state, key=key, std = new_std)
@@ -466,11 +250,24 @@ class DADAC_JAX(SAC):
             env_rec = carry.env_rec
             latency_manager = carry.latency_manager
 
-            env, env_rec, latency_manager, tmp_buf, buf_pos, buf_pos_init, full = cls.rollout(
+            (tmp_buffer, buf_pos, buf_pos_init, step_carry, env_rec, latency_manager, done_or_trunc, full, reset_key, key) = rollout_VC(
                         env, collect_timesteps, buffer_shape, actor_state, env_rec, latency_manager, 
                         buffer.buffer, buffer.pos, buffer.past_begin_pos, buffer.full)
+            
+            tmp_buffer, env_rec, step_carry, latency_manager = jax.lax.cond(
+                done_or_trunc,
+                lambda tb, er, sc, lm: on_done_processor_VC(tb, er, sc, lm, reset_key, 
+                                                       buf_pos + buffer.max_latency, buffer.max_latency, buffer_shape, buf_pos_init, env.ep_length, env), #new_init_pos
+                lambda tb, er, sc, lm: (tb, er, sc, lm),
+                tmp_buffer, env_rec, step_carry, latency_manager
+            )
+            
+            env = env.replace(
+                    step_carry = step_carry,
+                    key = key
+                )
                         
-            buffer = buffer.replace(buffer=tmp_buf, pos=buf_pos, past_begin_pos=buf_pos_init, full = full)
+            buffer = buffer.replace(buffer=tmp_buffer, pos=buf_pos, past_begin_pos=buf_pos_init, full = full)
 
             carry = carry.replace(env=env, buffer=buffer, env_rec=env_rec, latency_manager=latency_manager)
 
@@ -485,19 +282,17 @@ class DADAC_JAX(SAC):
             qf_state = carry.qf_state
             ent_coef_state = carry.ent_coef_state
             key = carry.key
-            past_entropy = carry.entropy
-
+        
             (actor_state, qf_state, ent_coef_state, 
             actor_loss_value, ent_coef_loss_value, 
             key, entropy) = cls.update_actor_and_temperature(actor_state, qf_state, ent_coef_state, batch_obs,
-                                                            target_entropy, key, act_dim,  past_entropy)
+                                                            target_entropy, key)
             carry = carry.replace(actor_state = actor_state, qf_state = qf_state, ent_coef_state = ent_coef_state,
                                 key = key, entropy = entropy)
 
             return (carry, (qf_loss_value, ent_coef_value, Q_mean, actor_loss_value, ent_coef_loss_value)), None
 
-        def env_rec_loop(carry: SACarry, _):
-            loss_rec = carry.loss_rec
+        def env_rec_loop(carry: SAC_Main_Carry, _):
             (carry, (qf_loss_value, ent_coef_value, Q_mean, actor_loss_value, ent_coef_loss_value)), _ = jax.lax.scan(policy_loop, (carry, default_entry_policy), None, length=num_loop_policy)
 
             return carry, (qf_loss_value, ent_coef_value, Q_mean, actor_loss_value, ent_coef_loss_value, carry.entropy, carry.std.mean(axis=0))
@@ -517,7 +312,7 @@ class DADAC_JAX(SAC):
             actor_state = carry.actor_state
             test_rec = carry.test_rec
             
-            test_rec, env_test, latency_manager = cls.eval_env(env_test, n_eval, actor_state, test_rec, latency_manager_test)
+            test_rec, env_test, latency_manager = eval_policy_env(env_test, n_eval, actor_state, test_rec, latency_manager_test)
             carry = carry.replace(env_test=env_test, test_rec=test_rec)
             
             return (carry, latency_manager), None
@@ -542,7 +337,7 @@ class DADAC_JAX(SAC):
         t1 = time.time()
         carry, loss_warmup = self.learning_wrapper(total_timesteps, self.train_freq.frequency, self.buffer.buffer.shape[2], self.env, self.env_rec, self.buffer, self.env.obs_length, self.env.action_length, self.gradient_steps, self.gamma_arr,
                                  self.tau, self.target_entropy, self.policy_delay, self.batch_size, self.policy.qf_state, self.policy.actor_state, self.ent_coef_state, self.key, self.learning_starts, 
-                                 eval_freq, n_eval, log_interval, self.latency_manager, self.latency_manager_test, self.start_std, self.start_entropy)
+                                 eval_freq, n_eval, log_interval, self.latency_manager, self.latency_manager_test, self.start_std, self.start_entropy, self.n_episodes_warmup, self.n_training_warmup)
         total_time = time.time() - t1
         print("Total training time: {:.2f}s, time per iteration: {:.3f}us".format(total_time, total_time/(total_timesteps * self.train_freq.frequency)*10**6) )
         
@@ -558,68 +353,7 @@ class DADAC_JAX(SAC):
                 file.write(serialized_weights)
 
         return carry
-
     
-    @staticmethod
-    @partial(jax.jit, donate_argnums=(0,))
-    def update_loss_rec(loss_rec: LossRecord, qf_loss_value, actor_loss_value, 
-                        ent_coef_loss_value, ent_coef_value, Q_mean, entropy, std):
-        
-        new_metrics = jnp.concatenate([
-        jnp.array([
-            qf_loss_value, 
-            actor_loss_value, 
-            ent_coef_loss_value, 
-            ent_coef_value, 
-            Q_mean, 
-            entropy
-        ]),
-        jnp.ravel(std)
-        ])
-
-        return loss_rec.replace(
-            history=loss_rec.history.at[loss_rec.pos].set(new_metrics),
-            pos=loss_rec.pos + 1
-        )
-    
-    @classmethod
-    @partial(jax.jit, static_argnames = ["cls", "gradient_steps", "batch_size", "tau", "policy_delay", "obs_dim", "act_dim", "log_interval"], donate_argnames = ["qf_state", "actor_state", "loss_rec"])
-    def train_jax(cls, buffer : CustomBufferLatency, qf_state: RLTrainState, actor_state: TrainState, gradient_steps: int, batch_size: int, discounts: jax.Array,
-                  ent_coef_state, key: jax.Array, tau, target_entropy, policy_delay, n_updates, obs_dim, act_dim, loss_rec: LossRecord, past_entropy, 
-                  log_interval : int, latency_manager: JaxLatencyEnv, past_std):
-        data, key = buffer.sample(buffer.buffer, batch_size * gradient_steps, buffer.pos, key, discounts, obs_dim, buffer.full, buffer.buffer_size, buffer.max_latency, latency_manager.action_dim)
-        
-        (
-            qf_state,
-            actor_state,
-            ent_coef_state,
-            key,
-            (actor_loss_value, qf_loss_value, ent_coef_loss_value, ent_coef_value, Q_mean, entropy, new_std),
-        ) = cls._train(
-            tau,
-            target_entropy,
-            gradient_steps,
-            data,
-            policy_delay,
-            (n_updates + 1) % policy_delay,
-            qf_state,
-            actor_state,
-            ent_coef_state,
-            key,
-            act_dim, 
-            past_entropy, 
-            buffer.max_latency, 
-            latency_manager.merged_dist.latency_probabilities, 
-            past_std
-        )        
-        
-        loss_rec = lax.cond((n_updates % log_interval) == 0,
-                            cls.update_loss_rec, 
-                            lambda *_: loss_rec, 
-                            loss_rec, qf_loss_value, actor_loss_value, ent_coef_loss_value, ent_coef_value, Q_mean, entropy, new_std)
-
-        return qf_state, actor_state, ent_coef_state, key, loss_rec, entropy, new_std
-
     @staticmethod
     @partial(jax.jit, static_argnames = ["action_dim", "max_latency"])
     def update_critic(
@@ -637,13 +371,12 @@ class DADAC_JAX(SAC):
         max_latency: int, 
         past_std: jax.Array, 
         tau: float,
-        latencies_prob: jax.Array, 
-        past_entropy: jax.Array
+        latencies_prob: jax.Array
     ):  
         dones = jnp.cumsum(dones, axis = 1)
         dones = (dones > 0).astype(jnp.float32)
         
-        key, noise_key, dropout_key_target, dropout_key_current, normal_key = jax.random.split(key, 5)
+        key, dropout_key_target, dropout_key_current, normal_key = jax.random.split(key, 4)
         dist = actor_state.apply_fn(actor_state.params, next_observations)
         prob = jnp.clip(dist.probs_parameter(), 1e-7, 1.0 - 1e-7).reshape((-1, max_latency, action_dim)) # (B, T, |A|)
         log_prob = jnp.log(prob)
@@ -660,7 +393,7 @@ class DADAC_JAX(SAC):
         normal_values = jnp.clip(normal_values,-3,3) *  jax.lax.stop_gradient(std_next) + jax.lax.stop_gradient(mean_next) #(2, |B|, T, |A|) 
 
         C1 = ent_coef_value * log_prob # (B, T, |A|)
-        C2 = (1 - dones) * discounts # (B, T)
+        C2 = (1.0 - dones) * discounts # (B, T)
 
         target_Q_values = jnp.min(mean_next, axis=0) # (B, T, |A|)
 
@@ -725,17 +458,15 @@ class DADAC_JAX(SAC):
         )
     
     @staticmethod
-    @partial(jax.jit, static_argnames = ["action_dim"])
+    @jax.jit
     def update_actor(
         actor_state: RLTrainState,
         qf_state: RLTrainState,
         ent_coef_state: TrainState,
         observations: jax.Array,
         key: jax.Array,
-        action_dim: int,
-        past_entropy: jax.Array
     ):
-        key, dropout_key, noise_key, target_key = jax.random.split(key, 4)
+        key, dropout_key = jax.random.split(key, 2)
 
         def actor_loss(params: flax.core.FrozenDict) -> tuple[jax.Array, jax.Array]:
             dist = actor_state.apply_fn(params, observations)
@@ -751,7 +482,7 @@ class DADAC_JAX(SAC):
             ent_coef_value =  lax.stop_gradient(ent_coef_state.apply_fn({"params": ent_coef_state.params}))
             
             entropy = dist.entropy().mean()
-            actor_loss =  (prob * (ent_coef_value * log_prob - min_qf_pi)).sum(axis = 1).mean() #+ (entropy - past_entropy) ** 2 * beta / 2
+            actor_loss =  (prob * (ent_coef_value * log_prob - min_qf_pi)).sum(axis = 1).mean()
             
             return actor_loss, entropy
 
@@ -761,140 +492,7 @@ class DADAC_JAX(SAC):
         return actor_state, qf_state, actor_loss_value, key, entropy
     
     @classmethod
-    @partial(jax.jit, static_argnames=["cls", "gradient_steps", "policy_delay", "action_dim", "max_latency"], donate_argnames = ["qf_state", "actor_state"])
-    def _train(
-        cls,
-        tau: float,
-        target_entropy: ArrayLike,
-        gradient_steps: int,
-        data: ReplayBufferSamplesNp,
-        policy_delay: int,
-        policy_delay_offset: int,
-        qf_state: RLTrainState,
-        actor_state: TrainState,
-        ent_coef_state: TrainState,
-        key: jax.Array,
-        action_dim: int, 
-        past_entropy: jax.Array, 
-        max_latency: int, 
-        latency_probabilities: jax.Array, 
-        past_std : jax.Array
-    ):
-        assert data.observations.shape[0] % gradient_steps == 0
-        batch_size = data.observations.shape[0] // gradient_steps
-
-        carry = {
-            "actor_state": actor_state,
-            "qf_state": qf_state,
-            "ent_coef_state": ent_coef_state,
-            "key": key,
-            "info": {
-                "actor_loss": jnp.array(0.0),
-                "qf_loss": jnp.array(0.0),
-                "ent_coef_loss": jnp.array(0.0),
-                "ent_coef_value": jnp.array(0.0),
-                "Q_mean": jnp.array(0.0),
-                "std": past_std,
-                "entropy": past_entropy
-            },
-        }
-
-        def one_update(i: int, carry: dict[str, Any]) -> dict[str, Any]:
-            actor_state = carry["actor_state"]
-            qf_state = carry["qf_state"]
-            ent_coef_state = carry["ent_coef_state"]
-            key = carry["key"]
-            info = carry["info"]
-            
-            batch_obs = jax.lax.dynamic_slice_in_dim(data.observations, i * batch_size, batch_size)
-            batch_actions = jax.lax.dynamic_slice_in_dim(data.actions, i * batch_size, batch_size)
-            batch_next_obs = jax.lax.dynamic_slice_in_dim(data.next_observations, i * batch_size , batch_size).reshape((batch_size*(max_latency), -1))
-            batch_rewards = jax.lax.dynamic_slice_in_dim(data.rewards, i * batch_size, batch_size).reshape((batch_size, (max_latency)))
-            batch_dones = jax.lax.dynamic_slice_in_dim(data.dones, i * batch_size, batch_size).reshape((batch_size, (max_latency)))
-            batch_discounts = jax.lax.dynamic_slice_in_dim(data.discounts, i * batch_size, batch_size)
-            batch_latencies = jnp.array(latency_probabilities, copy = False)
-            
-            (
-                qf_state,
-                (qf_loss_value, ent_coef_value, Q_mean, new_std),
-                key,
-            ) = cls.update_critic(
-                actor_state,
-                qf_state,
-                ent_coef_state,
-                batch_obs,
-                batch_actions,
-                batch_next_obs,
-                batch_rewards,
-                batch_dones,
-                batch_discounts,
-                key,
-                action_dim, 
-                max_latency, 
-                past_std, 
-                tau, 
-                batch_latencies, 
-                past_entropy
-            )
-            qf_state = cls.soft_update(tau, qf_state)
-            (actor_state, qf_state, ent_coef_state, actor_loss_value, ent_coef_loss_value, key, entropy) = jax.lax.cond(
-                (policy_delay_offset + i) % policy_delay == 0,
-                lambda *_: cls.update_actor_and_temperature(actor_state,
-                qf_state,
-                ent_coef_state,
-                batch_obs,
-                target_entropy,
-                key,
-                action_dim, 
-                info["entropy"]),
-                lambda *_: (actor_state, qf_state, ent_coef_state, info["actor_loss"], info["ent_coef_loss"], key, info["entropy"]),
-                actor_state,
-                qf_state,
-                ent_coef_state,
-                batch_obs,
-                target_entropy,
-                key,
-                action_dim, 
-                info["entropy"]
-            )
-            info = {
-                "actor_loss": actor_loss_value,
-                "qf_loss": qf_loss_value,
-                "ent_coef_loss": ent_coef_loss_value,
-                "ent_coef_value": ent_coef_value,
-                "Q_mean": Q_mean,
-                "entropy": entropy,
-                "std": new_std
-            }
-
-            return {
-                "actor_state": actor_state,
-                "qf_state": qf_state,
-                "ent_coef_state": ent_coef_state,
-                "key": key,
-                "info": info,
-            }
-
-        update_carry = jax.lax.fori_loop(0, gradient_steps, one_update, carry)
-
-        return (
-            update_carry["qf_state"],
-            update_carry["actor_state"],
-            update_carry["ent_coef_state"],
-            update_carry["key"],
-            (
-                update_carry["info"]["actor_loss"],
-                update_carry["info"]["qf_loss"],
-                update_carry["info"]["ent_coef_loss"],
-                update_carry["info"]["ent_coef_value"],
-                update_carry["info"]["Q_mean"],
-                update_carry["info"]["entropy"],
-                update_carry["info"]["std"],
-            ),
-        )
-    
-    @classmethod
-    @partial(jax.jit, static_argnames = ["cls", "action_dim"])
+    @partial(jax.jit, static_argnames = ["cls"])
     def update_actor_and_temperature(
         cls,
         actor_state: RLTrainState,
@@ -902,10 +500,7 @@ class DADAC_JAX(SAC):
         ent_coef_state: TrainState,
         observations: jax.Array,
         target_entropy: ArrayLike,
-        key: jax.Array,
-        action_dim: int,
-        past_entropy: jax.Array
-        
+        key: jax.Array, 
     ):
         (actor_state, qf_state, actor_loss_value, key, entropy) = cls.update_actor(
             actor_state,
@@ -913,8 +508,6 @@ class DADAC_JAX(SAC):
             ent_coef_state,
             observations,
             key,
-            action_dim,
-            past_entropy
         )
         
         ent_coef_state, ent_coef_loss_value = cls.update_temperature(target_entropy, ent_coef_state, entropy)
@@ -933,124 +526,15 @@ class DADAC_JAX(SAC):
         ent_coef_state = ent_coef_state.apply_gradients(grads=grads)
 
         return ent_coef_state, ent_coef_loss
-    
-    @classmethod
-    @partial(jax.jit, static_argnames=["cls", "eval_num"])
-    def eval_env(cls, env_test: EnvDataBinance, eval_num, actor_state, test_rec: TestRecord, latency_manager_test: JaxLatencyEnv):
-        
-        def run_single_episode(items, nothin):
-            env = items[0]
-            latency_manager = items[1]
-            env, latency_manager, final_reward, ep_len, pf_value, sharpe, opt_ratio = cls.rollout_for_test(env, actor_state, latency_manager)
-
-            return (env, latency_manager), (final_reward, ep_len, pf_value, sharpe, opt_ratio)
-
-        (env_test, latency_manager_test), (ret_reward, ret_len, ret_pf, ret_sharpe, ret_opt_ratio) = lax.scan(run_single_episode, (env_test, latency_manager_test), xs = jnp.arange(eval_num))
-        pos = test_rec.pos
-        
-        new_rew_mat = jax.lax.dynamic_update_slice(
-            test_rec.reward_mat, 
-            ret_reward.reshape(1,-1), 
-            (pos,0)
-        )
-        
-        new_l_mat = jax.lax.dynamic_update_slice(
-            test_rec.length_mat, 
-            ret_len.reshape(1,-1), 
-            (pos,0)
-        )
-        
-        new_pf_mat = jax.lax.dynamic_update_slice(
-            test_rec.pf_mat, 
-            ret_pf.reshape(1,-1), 
-            (pos,0)
-        )
-
-        new_sharpe_mat = jax.lax.dynamic_update_slice(
-            test_rec.sharpe_mat, 
-            ret_sharpe.reshape(1,-1), 
-            (pos,0)
-        )
-
-        new_opt_ratio_mat = jax.lax.dynamic_update_slice(
-            test_rec.opt_ratio_mat, 
-            ret_opt_ratio.reshape(1,-1), 
-            (pos,0)
-        )
-
-        new_test_rec = test_rec.replace(
-            length_mat=new_l_mat, 
-            reward_mat=new_rew_mat, 
-            pf_mat=new_pf_mat,
-            sharpe_mat = new_sharpe_mat,
-            opt_ratio_mat = new_opt_ratio_mat, 
-            pos=pos + 1
-        )
-
-        return new_test_rec, env_test, latency_manager_test
-    
-    @staticmethod
-    @partial(jax.jit, donate_argnames = ["env_test"])
-    def rollout_for_test(env_test: EnvDataBinance, actor_state, latency_manager_test: JaxLatencyEnv):
-
-        step_carry = env_test.step_carry
-        ep_length = env_test.ep_length
-
-        keys = jax.random.split(env_test.key, 1 + ep_length + 1)
-        key, all_keys, reset_key = keys[0], keys[1:], keys[-1]
-
-        def scan_body(items, keys_for_step):
-            step_carry = items[0]
-            current_obs = step_carry.current_obs
-            latency_manager_test = items[1]
-            past_done = items[2]
-            cumulated_reward = items[3]
-            current_ep_len = items[4]
-            pf_value = items[5]
-            
-            sample_key = keys_for_step
-
-            dist = actor_state.apply_fn(actor_state.params, current_obs)
-            action = jax.lax.select(latency_manager_test.carry.do_action, dist.sample(1, seed = sample_key)[0], latency_manager_test.carry.past_action)
-            
-            new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, action)
-            done_or_trunc = jnp.logical_or(done, truncated)
-
-            latency_manager_test, _, _, _ = step_latency_env(latency_manager_test, current_obs, new_obs, action, reward, done_or_trunc, past_done)
-
-            cumulated_reward = cumulated_reward + reward[0] * (1-past_done)
-            pf_value = new_obs[0, 16] * (1-past_done) + pf_value * past_done
-            market_val = (new_obs[0, 0] / 100 + 1) * (1-past_done) + pf_value * past_done
-            
-            return (step_carry, latency_manager_test, done_or_trunc | past_done, cumulated_reward, current_ep_len + (1-past_done), pf_value), (pf_value, market_val)
-        
-        (step_carry, latency_manager_test, done_or_trunc, final_reward, ep_len, pf_value), (pf_vals, raw_rets) = lax.scan(scan_body, (step_carry, latency_manager_test, False, 0.0, 0.0, 1.0), all_keys)
-        
-        mean = jnp.sum(pf_vals - raw_rets) / ep_len
-        mean_2 = jnp.sum((pf_vals - raw_rets) ** 2) / ep_len
-        
-        sharpe =  mean / (mean_2 - mean**2) ** 0.5 
-        ratio_to_opt = pf_value / (step_carry.opt_pf_states[-1] / 100 + 1)
-
-        step_carry = reset_step_carry(env_test, reset_key)
-        latency_manager_test, _, _ = reset_latency_env(latency_manager_test, step_carry.current_obs)
-        
-        env_test = env_test.replace(
-                step_carry = step_carry,
-                key = key
-            )
-        return env_test, latency_manager_test, final_reward, ep_len, pf_value, sharpe, ratio_to_opt
 
     @staticmethod
     @partial(jax.jit, static_argnames = ["tau", "act_dim"])
-    def warmup_train_critic(actor_state, qf_state, ent_coef_state, batch_obs,
-                                    batch_actions, batch_next_obs, batch_rewards,
-                                    batch_dones, discounts, key, act_dim, 
-                                    max_latency, past_std, tau, latency_probs, 
-                                    past_entropy):
+    def warmup_train_critic(actor_state, qf_state, batch_obs,
+                            batch_actions, batch_next_obs, batch_rewards,
+                            batch_dones, discounts, key, act_dim, 
+                            past_std, tau):
         
-        key, noise_key, dropout_key_target, dropout_key_current, normal_key = jax.random.split(key, 5)
-        ent_coef_value = ent_coef_state.apply_fn({"params": ent_coef_state.params})
+        key, dropout_key_target, dropout_key_current, normal_key = jax.random.split(key, 4)
         mean_next, std_next = qf_state.apply_fn(
             qf_state.target_params,
             batch_next_obs,
@@ -1058,11 +542,13 @@ class DADAC_JAX(SAC):
         )
         mean_next = mean_next.reshape(2, -1, act_dim)
         std_next = std_next.reshape(2, -1, act_dim)
+
+        dist = actor_state.apply_fn(actor_state.params, batch_next_obs)
+        prob = jnp.clip(dist.probs_parameter(), 1e-7, 1.0 - 1e-7).reshape((-1, act_dim))
         
+        target_Q_values = (jnp.min(mean_next, axis=0) * prob).sum(axis=-1)
         
-        target_Q_values = jnp.min(mean_next, axis=0)
-        
-        target_Q_values = target_Q_values * (1-batch_dones[:, None]) * discounts[:, [1]] + batch_rewards[:, None]
+        target_Q_values = target_Q_values * (1-batch_dones) * discounts[:, 1] + batch_rewards
 
         normal_values = jax.random.normal(normal_key, mean_next.shape, dtype=jnp.float32) 
         normal_values = jnp.clip(normal_values,-3,3) *  jax.lax.stop_gradient(std_next) + jax.lax.stop_gradient(mean_next) #(2, |B|, |A|) 
@@ -1080,7 +566,7 @@ class DADAC_JAX(SAC):
 
             target_q_bound =  jax.lax.stop_gradient(current_q_values) + difference # (B,|A|)
 
-            loss = (0.5 * (target_Q_values[None, ...] - current_q_values)**2).sum(axis = 1).mean() + (jax.lax.stop_gradient(new_means_std[:, None, :]**2) - (current_q_values - target_q_bound)**2 ).mean(axis = 1).sum()
+            loss = (0.5 * (target_Q_values[None, ...] - observed_q_values)**2).sum(axis = 1).mean() + (jax.lax.stop_gradient(new_means_std[:, None, :]**2) - (current_q_values - target_q_bound)**2 ).mean(axis = 1).sum()
             
             return loss , (new_means_std, observed_q_values.mean())
         
@@ -1089,21 +575,16 @@ class DADAC_JAX(SAC):
 
         return (
             qf_state,
-            (qf_loss_value, ent_coef_value, Q_mean, new_std),
+            (qf_loss_value, Q_mean, new_std),
             key,
         )        
 
+    @staticmethod
+    @jax.jit
     def warmup_update_actor(actor_state,
                 qf_state,
-                ent_coef_state,
                 batch_obs,
-                key,
-                act_dim,
-                past_entropy, 
                 batch_actions):
-        
-        key, dropout_key, noise_key, target_key = jax.random.split(key, 4)
-        beta = 0.5
 
         def actor_loss(params: flax.core.FrozenDict) -> tuple[jax.Array, jax.Array]:
             dist = actor_state.apply_fn(params, batch_obs)
@@ -1117,4 +598,4 @@ class DADAC_JAX(SAC):
         
         actor_state = actor_state.apply_gradients(grads=grads)
         
-        return actor_state, qf_state, actor_loss_value, key, entropy
+        return actor_state, qf_state, actor_loss_value, entropy
