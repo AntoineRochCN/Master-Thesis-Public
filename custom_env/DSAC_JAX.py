@@ -82,7 +82,7 @@ class DSAC_JAX(SAC):
             obs = step_carry.current_obs
             action = step_carry.opt_pf_arr[step_carry.timestep-1]
             
-            new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, jnp.asarray([action]))
+            new_obs, reward, done, truncated, step_carry = step_env(step_carry, jnp.asarray([action]))
             done_or_trunc = jnp.logical_or(done, truncated)
 
             transition_array = jnp.concatenate([obs.ravel(), new_obs.ravel(), jnp.atleast_1d(action), 

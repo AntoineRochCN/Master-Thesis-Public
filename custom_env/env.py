@@ -11,159 +11,15 @@ except:
     from .buffer import *
 
 from flax import struct
-from flax import struct
 import jax
-import jax.numpy as jnp
-from functools import partial
 import scipy as sc
+
 class foolish_env(gym.Env):
     def __init__(self, obs_shape, action_shape):
         super().__init__()
 
         self.observation_space = Box(-np.inf, np.inf, shape = (obs_shape,))
         self.action_space = Box(-1, 1, shape = (action_shape,))
-
-@struct.dataclass
-class JaxEnvStruct:
-    '''
-    Obs : (current_obs, entry_obs, state, pf_value, time_since_entry, dist_to_stop_loss, dist_to_stop_limit)
-    '''
-    key: jax.Array
-    timestep: jax.Array
-    timestep_entry: jax.Array
-    state: jax.Array
-    curve: jax.Array
-    current_obs: jax.Array
-
-    action_length: int = 3
-    obs_length: int = 4
-    ep_length: int = 10000
-    std_arr: float = 0.1
-    stop_loss: float = 0.9
-    stop_limit: float = 1.1
-
-    @classmethod
-    def create(cls, action_length: int, obs_length: int,
-               ep_length: int = 10000, seed: int = 0, std_arr: float = 0.1, 
-               stop_loss: float = 0.9, stop_limit: float = 1.1):
-
-        key = jax.random.key(seed)
-
-        env = cls(
-            action_length=action_length,
-            obs_length=obs_length,
-            ep_length=ep_length,
-            std_arr=std_arr,
-            key=key,
-            timestep=jnp.array(0, dtype=jnp.int32),
-            timestep_entry=jnp.array(0, dtype=jnp.int32),
-            state=jnp.array(0.0, dtype=jnp.float32),
-            curve=jnp.zeros(ep_length),
-            current_obs=jnp.zeros(obs_length),
-            stop_loss=stop_loss,
-            stop_limit=stop_limit,  
-        )
-
-        return env.reset()
-
-    @staticmethod
-    @jax.jit
-    def reset_jax(env):
-        obs, curve, key = env._gen_curve(
-            env.key, (env.ep_length,), env.std_arr
-        )
-        
-        init_obs = jnp.array([obs, obs, 0.0,1.0]).reshape(1,-1)
-        return env.replace(
-            key=key,
-            timestep=jnp.array(1, dtype=jnp.int32),
-            timestep_entry=jnp.array(0, dtype=jnp.int32),
-            state=jnp.array(0.0, dtype=jnp.float32),
-            curve=curve,
-            current_obs=init_obs,
-        )
-
-
-    def reset(self):
-        obs, curve, key = self._gen_curve(
-            self.key, (self.ep_length,), self.std_arr
-        )
-        
-        init_obs = jnp.array([obs[0], obs[0], 0.0, 1.0, 0.0, 1.0-self.stop_loss, self.stop_limit-1.0]).reshape(1,-1)
-
-        return self.replace(
-            key=key,
-            timestep=jnp.array(1, dtype=jnp.int32),
-            timestep_entry=jnp.array(0, dtype=jnp.int32),
-            state=jnp.array(0.0, dtype=jnp.float32),
-            curve=curve,
-            current_obs=init_obs,
-        )
-
-    @staticmethod
-    @partial(jax.jit, static_argnames=["shape"])
-    def _gen_curve(key: jax.Array, shape, std: float):
-        key, gen_key, min_key = jax.random.split(key, 3)
-
-        curve = jnp.cumsum(jax.random.normal(gen_key, shape) * std)# + 0.01)
-        curve = curve - jnp.min(curve) + jax.random.uniform(min_key, (), minval=0.5, maxval=1.5)    
-        curve = curve / curve [0]
-        
-        first_obs = curve[0:1]  
-        return first_obs, curve, key
-    
-    @staticmethod
-    @partial(jax.jit, static_argnames = ["ep_length", "stop_loss", "stop_limit"])
-    def step_updated(action, timestep, timestep_entry, state, ep_length, current_obs, new_obs, stop_loss, stop_limit):
-        
-        past_obs = current_obs[0]
-        obs_init = current_obs[1]
-        
-        truncated = jnp.asarray(timestep >= ep_length, dtype=jnp.bool_, copy=False)
-        
-        reward, done, new_pf_value = reward_function(new_obs, past_obs, obs_init, action, current_obs[2], current_obs[3], truncated, current_obs[4], stop_loss, stop_limit)
-
-        flag = action == state
-        new_timestep_entry = flag * timestep_entry + (1-flag) * timestep
-        
-        new_entry_obs = flag * current_obs[1] + (1-flag) * new_obs
-        
-        return jnp.hstack([new_obs, new_entry_obs, action, new_pf_value, (timestep +1 - timestep_entry)/ep_length, new_pf_value - stop_loss, stop_limit - new_pf_value]).reshape(1,7), reward, done, truncated, timestep+1, new_timestep_entry, action
-
-@partial(jax.jit, static_argnames = ["ep_length", "action_length", "obs_length", "stop_loss", "stop_limit"])
-def env_resetter(key, ep_length, std_arr, action_length, obs_length, stop_loss, stop_limit):
-    obs, curve, key = JaxEnvStruct._gen_curve(
-            key, (ep_length,), std_arr
-        )
-    
-    init_obs = jnp.array([obs[0], obs[0], 0.0, 1.0, 0.0, 1.0-stop_loss, stop_limit-1.0]).reshape(1,-1)
-
-    return JaxEnvStruct(
-        action_length=action_length,
-        obs_length= obs_length,
-        key=key,
-        timestep=jnp.array(1, dtype=jnp.int32),
-        timestep_entry=jnp.array(0, dtype=jnp.int32),
-        state=jnp.array(0.0, dtype=jnp.float32),
-        curve=curve,
-        current_obs=init_obs,
-    )
-
-
-@partial(jax.jit, static_argnames = ["ep_length", "action_length", "obs_length", "stop_loss", "stop_limit"])
-def env_resetter_raw(key, ep_length, std_arr, action_length, obs_length, stop_loss, stop_limit):
-    obs, curve, key = JaxEnvStruct._gen_curve(
-            key, (ep_length,), std_arr
-        )
-    init_obs = jnp.array([obs[0], obs[0], 0.0, 1.0, 0.0, 1.0-stop_loss, stop_limit-1.0]).reshape(1,-1)
-
-    timestep=jnp.array(1, dtype=jnp.int32)
-    timestep_entry=jnp.array([0], dtype=jnp.int32)
-    state=jnp.array([0], dtype=jnp.int32)
-    current_obs=init_obs
-
-
-    return timestep, timestep_entry, state, curve, current_obs, key
 
 @struct.dataclass
 class StepCarry():
@@ -182,6 +38,29 @@ class StepCarry():
     obs_length: float = struct.field(pytree_node=False)
     leverage: float = struct.field(pytree_node=False, default = 1.0)
     transaction_cost : float = struct.field(pytree_node=False, default = 0.075/100)
+
+class LatencyDistribution(NamedTuple):
+    latency_range: np.array
+    latency_probabilities: np.array
+    max_latency: np.array
+
+@struct.dataclass
+class CarryLatency():
+    timestep : int
+    ret_ind: int 
+    mask_actions : jax.Array
+    action_shift : jax.Array
+    mask_next_observations : jax.Array
+    next_obs_shift : jax.Array
+    buffer_latency: jax.Array #shape: (ep_length + max_tau_action + max_tau_obs + 3, action_dim + obs_dim + 2)
+    mask_return : jax.Array
+    past_action : jax.Array
+    past_obs : jax.Array
+    new_obs_positions : jax.Array
+    do_action: bool = False
+    pos_init_mask: int = 0 
+    n_iter_mask: int = 0
+    counter_shift: int = 0
 
 @struct.dataclass(frozen = True)
 class EnvDataBinance:
@@ -253,30 +132,6 @@ class EnvDataBinance:
         )
 
         return env
-    
-    @classmethod
-    @partial(jax.jit, static_argnames = ["cls"])
-    def reset_jax(cls):
-        return reset_env(cls)
-    
-    def reset(self):
-        self = self.reset_jax()
-        return self.current_obs, {}
-    
-    @staticmethod
-    @jax.jit
-    def step_jax(step_carry: StepCarry, action: float):
-        return step_env(step_carry, action)
-
-    def step(self, action):
-        new_obs, reward, done, truncated, new_timestep, new_timestep_entry = step_env(self, action)
-        self.current_obs = new_obs
-        self.timestep = new_timestep
-        self.timestep_entry = new_timestep_entry
-
-        return new_obs, reward, truncated, done
-
-
 
 @partial(jax.jit, static_argnames = ["ep_length"])
 def curve_generator(data: jax.Array, ep_length: int, key: jax.Array):
@@ -301,32 +156,6 @@ def normalize_curve(curve: jax.Array):
     curve = curve.at[:, [7,8,9]].set( (curve[:, [7,8,9]] / curve[0,5] - 1)*100)
     curve = curve.at[:, 5].set( (curve[:, 5]/ curve[0,5] - 1) * 100 )
     return curve[:, cols]
-
-@partial(jax.jit, static_argnames = ["cost", "leverage", "initial_capital"])
-def solve_constrained_oracle(prices, cost, leverage, initial_capital=1.0):
-    
-    p_diff_arr = jnp.diff(prices) 
-    r_long = p_diff_arr / (prices[:-1] + 100.0)
-    r_short = -(prices[:-1] + 100.0) * (p_diff_arr) / ((prices[1:] + 100.0) * (prices[:-1] + 100.0))
-    
-    def backward_step(val_next, W):
-        v_long, v_short = W
-        x = val_next[None, :] * jnp.asarray([[1.0, 1.0 + leverage *(v_long - cost), 1.0 + leverage * (v_short - cost)], 
-                                           [1.0 - leverage * cost, 1.0 + leverage * v_long, -jnp.inf], 
-                                           [1.0 - leverage * cost, -jnp.inf, 1.0 + leverage * v_short]])
-        return jnp.max(x, axis=1), jnp.argmax(x, axis=1)
-    
-    init_val = jnp.ones(3)
-    _, best_choices = jax.lax.scan(backward_step, init_val, (r_long, r_short), reverse=True, unroll=5)
-    
-    
-    def forward_step(curr_state_idx, best_choice):
-        next_state_idx = best_choice[curr_state_idx]
-        return next_state_idx, next_state_idx
-    
-    _, states = jax.lax.scan(forward_step, 0, best_choices, unroll=10)
-    
-    return jnp.concatenate([jnp.array([0.0]), states])
 
 @partial(jax.jit, static_argnames = ["cost", "leverage", "initial_capital"])
 def solve_constrained_oracle_pf(prices, cost, leverage, initial_capital=1.0):
@@ -368,18 +197,6 @@ def reset_step_carry(env: EnvDataBinance, key: jax.Array):
 
     return step_carry
 
-@partial(jax.jit, donate_argnums = (0,))
-def reset_env(env: EnvDataBinance):
-    key = env.key
-    new_curve, key = curve_generator(env.data, env.ep_length, key)
-    new_curve = normalize_curve(new_curve)
-    opt_pf_states, opt_pf_arr = solve_constrained_oracle_pf(new_curve[:,0], env.transaction_cost, env.leverage)    
-    current_obs = jnp.hstack([new_curve[0], (new_curve[0, 0] + new_curve[0, 5])/2, (new_curve[0, 0] + new_curve[0, 5])/2, 0.0, 1.0, 0.0, 1-env.stop_loss, env.stop_limit-1]).reshape(1,-1)
-    step_carry = env.step_carry.replace(timestep=1, timestep_entry=0, curve=new_curve, current_obs=current_obs, state = 0.0, pf_value = 1.0, opt_pf_arr = opt_pf_arr, opt_pf_states = opt_pf_states)
-    
-    return env.replace(step_carry = step_carry, key = key)
-
-
 @partial(jax.jit, donate_argnames = ["step_carry"])
 def step_env(step_carry : StepCarry, action: float):
 
@@ -415,11 +232,6 @@ def step_env(step_carry : StepCarry, action: float):
     return new_obs, reward, done, truncated, step_carry.replace(timestep = timestep + 1, timestep_entry = new_timestep_entry[0].astype(jnp.int32), 
                                                                 state = action[0].astype(jnp.float32), pf_value = new_pf_value[0],
                                                                 current_obs = new_obs)
-
-class LatencyDistribution(NamedTuple):
-    latency_range: np.array
-    latency_probabilities: np.array
-    max_latency: np.array
 
 def get_latency_prop(distribution, **kwargs):
     """
@@ -477,25 +289,6 @@ def latency_merger(dist_a: LatencyDistribution, dist_b: LatencyDistribution):
     latency_range = list(range(dist_a.latency_range[0] + dist_b.latency_range[0], dist_a.latency_range[-1] + dist_b.latency_range[-1] + 1))
     max_latency = np.max(latency_range) - 1
     return LatencyDistribution(latency_range, merged_probs, max_latency)
-
-@struct.dataclass
-class CarryLatency():
-    timestep : int
-    ret_ind: int 
-    mask_actions : jax.Array
-    action_shift : jax.Array
-    mask_next_observations : jax.Array
-    next_obs_shift : jax.Array
-    buffer_latency: jax.Array #shape: (ep_length + max_tau_action + max_tau_obs + 3, action_dim + obs_dim + 2)
-    mask_return : jax.Array
-    past_action : jax.Array
-    past_obs : jax.Array
-    new_obs_positions : jax.Array
-    do_action: bool = False
-    pos_init_mask: int = 0 
-    n_iter_mask: int = 0
-    counter_shift: int = 0
-
 
 @struct.dataclass
 class JaxLatencyEnv:
