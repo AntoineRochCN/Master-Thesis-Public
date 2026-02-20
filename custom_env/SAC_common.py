@@ -1,4 +1,4 @@
-from env import EnvDataBinance, JaxLatencyEnv, reset_latency_env, step_latency_env, reset_step_carry, update_latency_buffer, erase_coming_obs, erase_first_obs
+from env import EnvDataBinance, JaxLatencyEnv, reset_latency_env, step_latency_env, reset_step_carry, update_latency_buffer, erase_coming_obs, erase_first_obs, step_env
 from record_utils import TestRecord, LossRecord, EnvRecord, update_env_rec
 from buffer import CustomBufferBis
 from discrete_policy import RLTrainState, TrainState
@@ -50,7 +50,7 @@ def rollout_for_test(env_test: EnvDataBinance, actor_state, latency_manager_test
         dist = actor_state.apply_fn(actor_state.params, current_obs)
         action = jax.lax.select(latency_manager_test.carry.do_action, dist.sample(1, seed = sample_key)[0], latency_manager_test.carry.past_action)
         
-        new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, action)
+        new_obs, reward, done, truncated, step_carry = step_env(step_carry, action)
         done_or_trunc = jnp.logical_or(done, truncated)
 
         latency_manager_test, _, _, _ = step_latency_env(latency_manager_test, current_obs, new_obs, action, reward, done_or_trunc, past_done)
@@ -158,7 +158,7 @@ def rollout_VC(env: EnvDataBinance, n_steps, buffer_shape, actor_state, env_rec:
         dist = actor_state.apply_fn(actor_state.params, current_obs)
         action = jax.lax.select(latency_manager.carry.do_action, dist.sample(1, seed = sample_key)[0], latency_manager.carry.past_action)
         
-        new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, action)
+        new_obs, reward, done, truncated, step_carry = step_env(step_carry, action)
         done_or_trunc = jnp.logical_or(done, truncated)
 
         latency_manager, return_arr, mask_return_arr, _ = step_latency_env(latency_manager, current_obs, new_obs, action, reward, done_or_trunc, past_done)
@@ -204,7 +204,7 @@ def rollout_std(env: EnvDataBinance, n_steps, buffer_shape, actor_state, env_rec
         dist = actor_state.apply_fn(actor_state.params, current_obs)
         action = jax.lax.select(latency_manager.carry.do_action, dist.sample(1, seed = sample_key)[0], latency_manager.carry.past_action)
         
-        new_obs, reward, done, truncated, step_carry = EnvDataBinance.step_jax(step_carry, action)
+        new_obs, reward, done, truncated, step_carry = step_env(step_carry, action)
         done_or_trunc = jnp.logical_or(done, truncated)
 
         latency_manager, return_arr, mask_return_arr, _ = step_latency_env(latency_manager, current_obs, new_obs, action, reward, done_or_trunc, past_done)
