@@ -7,6 +7,7 @@ import jax
 from jax import lax
 import jax.numpy as jnp
 from flax import struct
+import flax
 
 @struct.dataclass
 class SAC_Main_Carry():
@@ -247,5 +248,16 @@ def on_done_processor_VC(tmp_buffer, env_rec, step_carry, latency_manager, reset
     step_carry = reset_step_carry(env, reset_key)
     latency_manager, _, _ = reset_latency_env(latency_manager, step_carry.current_obs)
     
-    
     return tmp_buffer, env_rec, step_carry, latency_manager
+
+@jax.jit
+def update_temperature(target_entropy, ent_coef_state: TrainState, entropy: float):
+    def temperature_loss(temp_params: flax.core.FrozenDict) -> jax.Array:
+        ent_coef_value = ent_coef_state.apply_fn({"params": temp_params})
+        ent_coef_loss = jnp.log(ent_coef_value) * lax.stop_gradient(entropy - target_entropy).mean()
+        return ent_coef_loss
+    
+    ent_coef_loss, grads = jax.value_and_grad(temperature_loss)(ent_coef_state.params)
+    ent_coef_state = ent_coef_state.apply_gradients(grads=grads)
+
+    return ent_coef_state, ent_coef_loss

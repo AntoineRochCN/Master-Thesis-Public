@@ -1,4 +1,3 @@
-import flashbax as fbx
 import jax.numpy as jnp
 import os
 from flax import struct
@@ -7,33 +6,6 @@ import jax
 from functools import partial
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
-
-class CustomBuffer:
-    def __init__(self, obs_dim, action_dim, buffer_shape, batch_size, ep_length):
-        self.obs_dim = obs_dim
-        self.action_dim = action_dim
-        self.batch_size = batch_size
-        self.ep_length = ep_length
-        self.memory = fbx.make_item_buffer(
-            max_length=buffer_shape, min_length=batch_size, sample_batch_size=batch_size, add_batches=True
-        )
-
-        self.init_memory()
-        
-    def init_memory(self):
-        self.example_transition = {
-        "obs": jnp.arange(self.ep_length, dtype= jnp.float32).reshape(-1,self.obs_dim),
-        "action": jnp.arange(self.ep_length, dtype= jnp.float32).reshape(-1,self.action_dim),
-        "reward": jnp.ones(self.ep_length, dtype= jnp.float32).reshape(-1,1),
-        "next_obs": jnp.arange(self.ep_length, dtype= jnp.float32).reshape(-1,self.obs_dim),
-        "done": jnp.zeros(self.ep_length, dtype= jnp.float32), 
-        }
-        self.buffer = self.memory.init(self.example_transition)
-
-    def add(self, batch):
-        self.buffer = self.memory.add(self.buffer, batch)
-
 
 class ReplayBufferSamplesJAX(NamedTuple):
     observations: jax.Array
@@ -71,7 +43,7 @@ class CustomBufferBis:
 class CustomBufferLatency:
     buffer: jax.Array
     
-    buffer_size: int
+    buffer_size: int = struct.field(pytree_node=False)
     full : jax.Array
     max_latency: int = struct.field(pytree_node=False)
     pos: int = 0
@@ -107,23 +79,7 @@ class CustomBufferLatency:
             discounts=discounts
         )
         return batch, key
-
-@partial(jax.jit, static_argnames = ["window_len"])
-def create_sliding_windows(arr, window_len):
-    N, D = arr.shape
-    num_windows = N - window_len + 1
-    start_indices = jnp.arange(num_windows)
     
-    def get_window(i):
-        return jax.lax.dynamic_slice(arr, (i, 0), (window_len, D))
-    
-    return jax.vmap(get_window)(start_indices)
-
-@jax.jit
-def update_unstored_obs(tbp_obs, idx, tmp_buffer, pos_buffer):
-    tmp_buffer = jax.lax.dynamic_update_slice(tmp_buffer, tbp_obs, (pos_buffer, 0))    
-    return tmp_buffer
-
 @partial(jax.jit, static_argnames=["max_latency", "buffer_length", "patch_height"], donate_argnums = (0,))
 def update_latency_buffer(buffer, buffer_pos, max_latency, buffer_length, mask_return_arr, return_arr, patch_height):
     adaptated_tmp_buffer = jnp.where(mask_return_arr[:, None], return_arr, jax.lax.dynamic_slice(buffer[:, max_latency, :], (buffer_pos, 0), (patch_height, buffer_length)))
@@ -146,7 +102,7 @@ def update_latency_buffer(buffer, buffer_pos, max_latency, buffer_length, mask_r
 
 @partial(jax.jit, static_argnames = ["max_latency", "buffer_length"], donate_argnums = (0,))
 def erase_coming_obs(buffer, buffer_pos, max_latency, buffer_length):
-    return jax.lax.dynamic_update_slice(buffer, jnp.zeros((max_latency, max_latency, buffer_length)), (buffer_pos, 0, 0))
+    return jax.lax.dynamic_update_slice(buffer, jnp.zeros((max_latency, max_latency, buffer_length), dtype=jnp.float32), (buffer_pos, 0, 0))
 
 @partial(jax.jit, static_argnames = ["max_latency", "buffer_length", "ep_length"], donate_argnums = (0,))
 def erase_first_obs(buffer, buffer_pos, max_latency, buffer_length, pos_init, ep_length):

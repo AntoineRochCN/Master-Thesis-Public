@@ -20,13 +20,6 @@ class EnvRecord:
     cumulated_reward: float = 0.0
 
 @struct.dataclass
-class MetricRecord:
-    losses: LossRecord
-    env_stats: EnvRecord
-    n_timesteps: int
-    pos : int
-
-@struct.dataclass
 class TestRecord:
     reward_mat: jax.Array
     pf_mat: jax.Array

@@ -510,23 +510,10 @@ class DADAC_JAX(SAC):
             key,
         )
         
-        ent_coef_state, ent_coef_loss_value = cls.update_temperature(target_entropy, ent_coef_state, entropy)
+        ent_coef_state, ent_coef_loss_value = update_temperature(target_entropy, ent_coef_state, entropy)
         
         return actor_state, qf_state, ent_coef_state, actor_loss_value, ent_coef_loss_value, key, entropy
     
-    @staticmethod
-    @jax.jit
-    def update_temperature(target_entropy: ArrayLike, ent_coef_state: TrainState, entropy: float):
-        def temperature_loss(temp_params: flax.core.FrozenDict) -> jax.Array:
-            ent_coef_value = ent_coef_state.apply_fn({"params": temp_params})
-            ent_coef_loss = jnp.log(ent_coef_value) * lax.stop_gradient(entropy - target_entropy).mean()
-            return ent_coef_loss
-        
-        ent_coef_loss, grads = jax.value_and_grad(temperature_loss)(ent_coef_state.params)
-        ent_coef_state = ent_coef_state.apply_gradients(grads=grads)
-
-        return ent_coef_state, ent_coef_loss
-
     @staticmethod
     @partial(jax.jit, static_argnames = ["tau", "act_dim"])
     def warmup_train_critic(actor_state, qf_state, batch_obs,
