@@ -1,3 +1,4 @@
 test_env.py
 /test_env_record/
 /__pycache__/*
+/algo_comparison/

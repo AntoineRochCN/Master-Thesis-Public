@@ -153,10 +153,10 @@ class LatencyEnv(gym.Wrapper):
         self.mask_next_observations[self.idx_obs] = True
         
     def _init_buffers(self):
-        self.action_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2, *self.action_space.shape))
-        self.obs_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2+1, *self.observation_space.shape))
-        self.done_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2))
-        self.reward_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2))
+        self.action_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 3, *self.action_space.shape))
+        self.obs_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 3+1, *self.observation_space.shape))
+        self.done_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 3))
+        self.reward_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 3))
 
     def reset(self, *, seed = None, options = None):
         self._init_time_shifts()
@@ -542,4 +542,38 @@ class Buffered_NormalActionNoise(ActionNoise):
 
     def __repr__(self) -> str:
         return f"NormalActionNoise(mu={self._mu}, sigma={self._sigma})"
+    
+
+
+class ReplayBuffer_DelayedSAC(ReplayBuffer):
+    def __init__(self, buffer_size, observation_space, action_space, device = "auto", n_envs = 1, optimize_memory_usage = False, handle_timeout_termination = True):
+        super().__init__(buffer_size, observation_space, action_space, device, n_envs, optimize_memory_usage, handle_timeout_termination)
+
+    def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> ReplayBufferSamples:        
+        if self.full:
+            batch_inds_obs = (np.random.randint(1, self.buffer_size, size=batch_size, dtype=np.int32) + self.pos) % self.buffer_size
+        else:
+            batch_inds_obs = np.random.randint(0, self.pos , size=batch_size, dtype=np.int32)
+        return self._get_samples(batch_inds_obs,env)
+    
+    
+    @staticmethod
+    @jax.jit
+    def _convert_sample_jax(obs, actions, next_obs, dones, rewards, next_actions):
+        return CustomReplayBufferSamples(jnp.array(obs, copy=False, dtype= jnp.float32),
+                                         jnp.array(actions, copy=False, dtype= jnp.float32),
+                                         jnp.array(next_obs, copy=False, dtype= jnp.float32),
+                                         jnp.array(dones, copy=False, dtype= jnp.float32),
+                                         jnp.array(rewards, copy=False, dtype= jnp.float32),
+                                         next_actions=jnp.array(next_actions, copy=False, dtype= jnp.float32))
+    
+    def _get_samples(self, batch_inds_obs,env) -> ReplayBufferSamples:        
+        env_indices = 0
+        next_obs = self.next_observations[batch_inds_obs, env_indices]
+        
+        rewards = self.rewards[batch_inds_obs, env_indices].reshape(-1,1)
+        dones = (self.dones[batch_inds_obs, env_indices] * (1 - self.timeouts[batch_inds_obs, env_indices])).reshape(-1,1)
+        return self._convert_sample_jax(self.observations[batch_inds_obs, env_indices, :], self.actions[batch_inds_obs, env_indices, :],
+                                        next_obs, dones, rewards, self.actions[batch_inds_obs, env_indices, :])
+
 
