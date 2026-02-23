@@ -1,0 +1,14 @@
+aiohttp==3.13.3
+flax==0.11.0
+gymnasium==1.2.0
+jax==0.6.2
+matplotlib==3.10.8
+numpy==2.4.2
+optax==0.2.7
+pandas==3.0.1
+sbx_rl==0.22.0
+scipy==1.17.1
+stable_baselines3==2.7.0
+tensorflow_probability==0.25.0
+torch==2.7.1+cu128
+websockets==15.0.1
