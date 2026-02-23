@@ -62,6 +62,7 @@ def arg_maker(caso):
     match caso:
         ### Debugging case
         case 0: 
+            seed_list = [0]
             dist_obs = ["gamma"]
             dist_obs_kwargs = [{"delta_max": 6, "mean": 2}]
             dist_act = ["test"]
