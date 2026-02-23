@@ -3,8 +3,13 @@ import asyncio
 import numpy as np
 import websockets
 import json
+import os
+os.chdir("./custom_env")
+print(f"Now in: {os.getcwd()}")
+#from DADAC_JAX import DADAC_JAX
+#from env import solve_constrained_oracle_pf
 from custom_env.DADAC_JAX import DADAC_JAX
-from custom_env.env import solve_constrained_oracle_pf
+from custom_env.env import solve_constrained_oracle_pf, foolish_env
 import jax
 import os
 import gymnasium as gym
@@ -81,37 +86,14 @@ class ManualMarginTrader:
         }
         return await self._request('POST', '/sapi/v1/asset/transfer', params)
 
-class foolish_env(gym.Env):
-    def __init__(self, obs_shape, action_dim):
-        super().__init__()
-        self.action_space = gym.spaces.Box(0, 2, shape = action_dim)
-        self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape = obs_shape)
-        self.action_length = 3
-
-    def step(self, action):
-        return 0,0,0,0
-
-    def reset(self):
-        return 0,{}
-
-class foolish_env_bis(gym.Env):
-    def __init__(self, obs_shape, action_shape):
-        super().__init__()
-
-        self.observation_space = Box(-np.inf, np.inf, shape = (obs_shape,))
-        self.action_space = Box(-1, 1, shape = (action_shape,))
-
-        self.action_length = 3
-        self.obs_shape = 20
-
 class policy:
     """
     Policy types: benchmark | custom | test_send_unique | trained_policy -> pass 'params_path as kwargs | random | inactive
     """
     def __init__(self, kind, test_env, **kwargs):
         if kind == "benchmark":
-            DISRESPECT_THE_ENV = foolish_env_bis(20,1)
-            self.model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, DISRESPECT_THE_ENV, None, None, None, None,
+            DISRESPECT_THE_ENV = foolish_env(20,3)
+            self.model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, DISRESPECT_THE_ENV, None, None, None,
                               policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), target_entropy=1)
             with open(kwargs["param_path"], "rb") as f:
                 serialized_bytes = f.read()
@@ -130,8 +112,8 @@ class policy:
         
         elif kind == "trained_policy":
             self.predict = self.predict_RL
-            DISRESPECT_THE_ENV = foolish_env_bis(20,1)
-            self.model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, DISRESPECT_THE_ENV, None, None, None, None,
+            DISRESPECT_THE_ENV = foolish_env(20,3)
+            self.model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, DISRESPECT_THE_ENV, None, None, None,
                               policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), target_entropy=1)
             with open(kwargs["param_path"], "rb") as f:
                 serialized_bytes = f.read()
@@ -235,7 +217,7 @@ class Backtester():
         else:
             raise NotImplementedError
     
-        test_env = foolish_env((20,),(1,))
+        test_env = foolish_env(20,3)
         self.policy = policy(policy_type, test_env, **policy_kwargs)
         
         self.action_rec = np.zeros((max_ep_length + 1))

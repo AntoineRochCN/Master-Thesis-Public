@@ -20,6 +20,8 @@ class foolish_env(gym.Env):
 
         self.observation_space = Box(-np.inf, np.inf, shape = (obs_shape,))
         self.action_space = Box(-1, 1, shape = (action_shape,))
+        self.action_length = action_shape
+        self.obs_length = obs_shape
 
 @struct.dataclass
 class StepCarry():

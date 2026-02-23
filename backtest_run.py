@@ -139,7 +139,7 @@ if __name__ == '__main__':
     experience_name = input("Save file: ")
 
     print("In case of using a DADAC model, be sure to provide a valid saved model path")
-    saved_model_path = "./custom_env/model_save_test.msgpack"
+    saved_model_path = "./saved_models/model_save_test.msgpack"
     policy_kwargs = {"param_path": saved_model_path}
 
     print("In case of using a local data, be sure to provide a valid data path")

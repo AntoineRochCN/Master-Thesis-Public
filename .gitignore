@@ -5,3 +5,5 @@ test_env.py
 /backtest/
 .env
 *.pyc
+/saved_models/
+/data/
