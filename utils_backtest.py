@@ -5,11 +5,9 @@ import websockets
 import json
 import os
 os.chdir("./custom_env")
-print(f"Now in: {os.getcwd()}")
-#from DADAC_JAX import DADAC_JAX
-#from env import solve_constrained_oracle_pf
 from custom_env.DADAC_JAX import DADAC_JAX
 from custom_env.env import solve_constrained_oracle_pf, foolish_env
+os.chdir("../")
 import jax
 import os
 import gymnasium as gym
@@ -92,7 +90,7 @@ class policy:
     """
     def __init__(self, kind, test_env, **kwargs):
         if kind == "benchmark":
-            DISRESPECT_THE_ENV = foolish_env(20,3)
+            DISRESPECT_THE_ENV = foolish_env(20,1)
             self.model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, DISRESPECT_THE_ENV, None, None, None,
                               policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), target_entropy=1)
             with open(kwargs["param_path"], "rb") as f:
@@ -112,7 +110,7 @@ class policy:
         
         elif kind == "trained_policy":
             self.predict = self.predict_RL
-            DISRESPECT_THE_ENV = foolish_env(20,3)
+            DISRESPECT_THE_ENV = foolish_env(20,1)
             self.model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, DISRESPECT_THE_ENV, None, None, None,
                               policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), target_entropy=1)
             with open(kwargs["param_path"], "rb") as f:
@@ -156,7 +154,7 @@ class policy:
         return action
     
     def predict_RL(self, obs):
-        return self.model.policy.predict(obs.reshape(1,-1), deterministic=True)[0]
+        return self.model.policy._predict(obs.reshape(1,-1), deterministic=True)[0]
     
     def predict_test(self, obs):
         action = 0
@@ -217,7 +215,7 @@ class Backtester():
         else:
             raise NotImplementedError
     
-        test_env = foolish_env(20,3)
+        test_env = foolish_env(20,1)
         self.policy = policy(policy_type, test_env, **policy_kwargs)
         
         self.action_rec = np.zeros((max_ep_length + 1))

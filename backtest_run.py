@@ -8,7 +8,7 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 api_key = os.getenv('BINANCE_API_KEY')
 api_secret = os.getenv('BINANCE_API_SECRET')
 
-def backtest(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, experience_name, data_path = "./custom_env/scrapper_out.csv"):
+def backtest(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, experience_name, data_path = "./data/test_data.csv"):
     test_type = "local"
     
     act_rec_arr = []
@@ -139,11 +139,11 @@ if __name__ == '__main__':
     experience_name = input("Save file: ")
 
     print("In case of using a DADAC model, be sure to provide a valid saved model path")
-    saved_model_path = "./saved_models/model_save_test.msgpack"
+    saved_model_path = "./saved_models/model_test.msgpack"
     policy_kwargs = {"param_path": saved_model_path}
 
     print("In case of using a local data, be sure to provide a valid data path")
-    data_path = "./custom_env/scrapper_out.csv" 
+    data_path = "./data/test_data.csv" 
     match test_case:
         case 0:
             backtest(policy_type, policy_kwargs, ep_length, N_tests, leverage, experience_name, data_path = data_path)
