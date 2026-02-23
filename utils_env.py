@@ -52,26 +52,6 @@ class LatencyDistribution(NamedTuple):
     latency_probabilities: np.array
     max_latency: np.array
 
-def solve_latency_vectorized(x):
-    range_idx = np.arange(x.shape[0])
-    effective_indices = np.maximum.accumulate(x - range_idx) + range_idx
-    
-    size = effective_indices[-1] + 1
-    res = np.zeros(size, dtype=int)
-
-    mask_changes = np.zeros(len(x), dtype=bool)
-    mask_changes[0] = True             
-    mask_changes[1:] = (x[1:] != x[:-1]) 
-    
-    target_indices = effective_indices[mask_changes]
-    
-    valid_targets = target_indices[target_indices >= 0]
-    
-    if len(valid_targets) > 0:
-        res[valid_targets] = 1
-        
-    return np.cumsum(res)
-
 def get_latency_prop(distribution, **kwargs):
     """
     Gets a distribution name with its parameters, and returns a tuple with the values taken by the latency, its probabilities and the value of the maximum delay
@@ -173,10 +153,10 @@ class LatencyEnv(gym.Wrapper):
         self.mask_next_observations[self.idx_obs] = True
         
     def _init_buffers(self):
-        self.action_buffer = np.zeros((self.spec.max_episode_steps + self.max_latency_action + self.max_latency_observation + 3, *self.action_space.shape))
-        self.obs_buffer = np.zeros((self.spec.max_episode_steps + self.max_latency_action + self.max_latency_observation+1 + 3, *self.observation_space.shape))
-        self.done_buffer = np.zeros((self.spec.max_episode_steps + self.max_latency_action + self.max_latency_observation + 3))
-        self.reward_buffer = np.zeros((self.spec.max_episode_steps + self.max_latency_action + self.max_latency_observation + 3))
+        self.action_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2, *self.action_space.shape))
+        self.obs_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2+1, *self.observation_space.shape))
+        self.done_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2))
+        self.reward_buffer = np.zeros((self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation) * 2))
 
     def reset(self, *, seed = None, options = None):
         self._init_time_shifts()
@@ -245,32 +225,6 @@ class LatencyEnv(gym.Wrapper):
         self.timestep += 1
         return ret, info_ret
 
-class test_env(gym.Env):
-    def __init__(self):
-        super().__init__()
-        self.n_call = 0
-        self.reward = 0
-        self.action_space = gym.spaces.Box(-1,1,(1,))
-        self.N_max = 2**30
-        self.observation_space = gym.spaces.Box(-1, self.N_max, dtype=np.int32)
-
-    def reset(self, *, seed = None, options = None):
-        self.n_call = 1
-        self.reward = 0
-        return self.n_call, {}
-
-    def step(self, action):
-        self.n_call += 1
-        self.reward += 1
-        obs = self.n_call 
-        #print("obs; ", obs - 1, "next obs: " , obs," action; ", action, " reward: ", self.reward)
-        reward = self.reward
-        info = {"action": self.n_call}
-        
-        truncated = (self.n_call % 1000 == 0)
-        done = truncated
-        return obs, reward, done, truncated, info
-
 class CustomMonitor(Monitor):
     def __init__(self, env, allow_early_resets=True):
         super().__init__(env)
@@ -303,37 +257,6 @@ class CustomMonitor(Monitor):
                 infos["episode"] = ep_info
             self.total_steps += 1
         return ret
-
-class ReplayBuffer_DelayedSAC(ReplayBuffer):
-    def __init__(self, buffer_size, observation_space, action_space, device = "auto", n_envs = 1, optimize_memory_usage = False, handle_timeout_termination = True):
-        super().__init__(buffer_size, observation_space, action_space, device, n_envs, optimize_memory_usage, handle_timeout_termination)
-
-    def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> ReplayBufferSamples:        
-        if self.full:
-            batch_inds_obs = (np.random.randint(1, self.buffer_size, size=batch_size, dtype=np.int32) + self.pos) % self.buffer_size
-        else:
-            batch_inds_obs = np.random.randint(0, self.pos , size=batch_size, dtype=np.int32)
-        return self._get_samples(batch_inds_obs,env)
-    
-    
-    @staticmethod
-    @jax.jit
-    def _convert_sample_jax(obs, actions, next_obs, dones, rewards, next_actions):
-        return CustomReplayBufferSamples(jnp.array(obs, copy=False, dtype= jnp.float32),
-                                         jnp.array(actions, copy=False, dtype= jnp.float32),
-                                         jnp.array(next_obs, copy=False, dtype= jnp.float32),
-                                         jnp.array(dones, copy=False, dtype= jnp.float32),
-                                         jnp.array(rewards, copy=False, dtype= jnp.float32),
-                                         next_actions=jnp.array(next_actions, copy=False, dtype= jnp.float32))
-    
-    def _get_samples(self, batch_inds_obs,env) -> ReplayBufferSamples:        
-        env_indices = 0
-        next_obs = self.next_observations[batch_inds_obs, env_indices]
-        
-        rewards = self.rewards[batch_inds_obs, env_indices].reshape(-1,1)
-        dones = (self.dones[batch_inds_obs, env_indices] * (1 - self.timeouts[batch_inds_obs, env_indices])).reshape(-1,1)
-        return self._convert_sample_jax(self.observations[batch_inds_obs, env_indices, :], self.actions[batch_inds_obs, env_indices, :],
-                                        next_obs, dones, rewards, self.actions[batch_inds_obs, env_indices, :])
 
 class CustomReplayBuffer(ReplayBuffer):
     def __init__(self, buffer_size, observation_space, action_space, max_latency = None, device = "auto", n_envs = 1, optimize_memory_usage = False, handle_timeout_termination = True, reward_scale = 1,
