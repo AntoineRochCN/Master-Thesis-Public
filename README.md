@@ -1,4 +1,4 @@
-# Managing latencies in RL using a SAC variant
+# Managing latencies in RL using a SAC variant [WIP]
 
 ## Project Presentation
 This repository is the support of my master's thesis over latencies management in reinforcement learning (RL) using the DADAC variant of the SAC algorithm, published in the [DADAC article](https://openreview.net/forum?id=Y9cVrdYn10).
@@ -54,15 +54,7 @@ The data is almost trained raw:
 ## Repo Structure
 
 ```text
-├── data/               # Raw and processed datasets (ignored if large)
-├── docs/               # Documentation and GitHub Pages assets
-├── models/             # Trained model checkpoints or logic
-├── notebooks/          # Jupyter notebooks for exploratory analysis
-├── scripts/            # Utility Python scripts
-├── .env.example        # Template for Binance API keys
-├── .gitignore          # Prevents .env and data leaks
-├── main.py             # Entry point of the application
-└── requirements.txt    # Project dependencies
+├── exemple/               # A nice example
 ```
 
 ## Installation
@@ -77,6 +69,4 @@ pip install --no-deps --force-reinstall nvidia-cublas-cu12>=12.9.1.4
 
 ## 📝 Related Papers
 
-1.  **Author, A., & Author, B. (202X).** *Title of the most relevant paper*. Journal Name. [Link]
-2.  **Binance Research.** *Market Microstructure Report*. [Link]
-3.  **Your Name (2026).** *Preliminary Findings on Crypto Volatility*. Thesis Working Paper.
+1.  **Example et. al.** *Title of the most relevant paper*. Journal Name. [Link]
