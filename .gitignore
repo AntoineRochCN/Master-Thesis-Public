@@ -1,4 +1,7 @@
 test_env.py
 /test_env_record/
 /__pycache__/*
-/algo_comparison/
+/parallel_runs/
+/backtest/
+.env
+*.pyc

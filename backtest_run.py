@@ -5,6 +5,9 @@ import pickle
 import os
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 
+api_key = os.getenv('BINANCE_API_KEY')
+api_secret = os.getenv('BINANCE_API_SECRET')
+
 def backtest(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, experience_name, data_path = "./custom_env/scrapper_out.csv"):
     test_type = "local"
     
@@ -32,7 +35,7 @@ def backtest(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, 
     timestamp_rec_arr = np.array(timestamp_rec_arr)
     time_of_flight_rec_arr = np.array(time_of_flight_rec_arr)
 
-    file_name = "./final_experiments/backtest/" + experience_name + ".pkl"
+    file_name = "./backtest/backtest/" + experience_name + ".pkl"
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
     with open(file_name, "wb") as f:
@@ -64,10 +67,10 @@ def offline_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, levera
     timestamp_rec_arr = np.array(timestamp_rec_arr)
     time_of_flight_rec_arr = np.array(time_of_flight_rec_arr)
 
-    file_name = "./final_experiments/offline_test/" + experience_name  + ".pkl"
+    file_name = "./backtest/offline_test/" + experience_name  + ".pkl"
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
-    plot_benchmark(file_name, "./final_experiments/offline_test/" + experience_name  + '.png', fees=0.075/100)
+    plot_benchmark(file_name, "./backtest/offline_test/" + experience_name  + '.png', fees=0.075/100)
 
     with open(file_name, "wb") as f:
         pickle.dump(output_dict, f)
@@ -98,7 +101,7 @@ def online_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverag
     timestamp_rec_arr = np.array(timestamp_rec_arr)
     time_of_flight_rec_arr = np.array(time_of_flight_rec_arr)
 
-    file_name = "./final_experiments/online_test/" + experience_name  + ".pkl"
+    file_name = "./backtest/online_test/" + experience_name  + ".pkl"
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
     with open(file_name, "wb") as f:
@@ -113,7 +116,7 @@ def bench_latency(max_trade_num ,policy_kwargs, experience_name):
     
     act_rec, obs_rec, timestamp_rec, time_of_flight, ref = asyncio.run(obj.run())
 
-    file_name = "./final_experiments/benchmark/" + experience_name  + ".pkl"
+    file_name = "./backtest/benchmark/" + experience_name  + ".pkl"
     output_dict = {"actions" : act_rec, "observations": obs_rec, "timestamps": timestamp_rec, "fly_time": time_of_flight, "ref": ref}
 
     with open(file_name, "wb") as f:
@@ -135,8 +138,12 @@ if __name__ == '__main__':
     leverage = eval(input("Leverage: "))
     experience_name = input("Save file: ")
 
-    policy_kwargs = {"param_path": "./custom_env/model_save_test.msgpack"}
-    data_path = "./custom_env/scrapper_out.csv"
+    print("In case of using a DADAC model, be sure to provide a valid saved model path")
+    saved_model_path = "./custom_env/model_save_test.msgpack"
+    policy_kwargs = {"param_path": saved_model_path}
+
+    print("In case of using a local data, be sure to provide a valid data path")
+    data_path = "./custom_env/scrapper_out.csv" 
     match test_case:
         case 0:
             backtest(policy_type, policy_kwargs, ep_length, N_tests, leverage, experience_name, data_path = data_path)

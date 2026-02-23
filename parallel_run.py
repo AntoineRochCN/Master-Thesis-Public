@@ -26,7 +26,7 @@ def run_sim(caso, seed, dist_obs, env_name, dist_obs_kwargs, dist_act, dist_act_
 
     callback = CustomEvalCallback(delayed_test_env, n_eval_episodes=10, eval_freq=2500, verbose=0, learning_timesteps=n_timesteps)
 
-    save_dir = "./algo_comparison/sim_number_{}/".format(case_number)
+    save_dir = "./parallel_runs/sim_number_{}/".format(case_number)
 
     match caso:
         
@@ -61,7 +61,7 @@ def arg_maker(caso):
     n_timestep = [10**6]
     match caso:
         ### Debugging case
-        case 1: 
+        case 0: 
             dist_obs = ["gamma"]
             dist_obs_kwargs = [{"delta_max": 6, "mean": 2}]
             dist_act = ["test"]
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     with mp.Pool(n_thread) as p:
         result = p.starmap(run_sim, args)
 
-    with open("./algo_comparison/sim_number_{}/results.json".format(caso), 'w') as file:
+    with open("./parallel_runs/sim_number_{}/results.json".format(caso), 'w') as file:
         json.dump(result, file)
 
     print("End of case ", caso)
