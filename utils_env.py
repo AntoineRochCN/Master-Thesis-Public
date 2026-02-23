@@ -307,9 +307,9 @@ class CustomReplayBuffer(ReplayBuffer):
         self.buffer_next_observations[self.buffer_pos] = np.array(next_obs)
         self.buffer_actions[self.buffer_pos] = np.array(action)
         self.buffer_rewards[self.buffer_pos] = np.array(reward)
-        self.buffer_dones[self.buffer_pos] = np.array(done)
+        self.buffer_dones[self.buffer_pos] = np.array(done).squeeze()
         if self.handle_timeout_termination:
-            self.buffer_timeouts[self.buffer_pos] = np.array([info.get("TimeLimit.truncated", False) for info in infos])
+            self.buffer_timeouts[self.buffer_pos] = np.array([info.get("TimeLimit.truncated", False) for info in infos]).squeeze()
 
         self.ep_length += 1
         self.buffer_pos += 1

@@ -41,3 +41,10 @@ A clear map helps others (and your supervisor) navigate your work.
 ├── .gitignore          # Prevents .env and data leaks
 ├── main.py             # Entry point of the application
 └── requirements.txt    # Project dependencies
+
+## Installation
+
+pip install -r requirements.txt
+
+jax 0.6.2 doesn't behave very well with nvidia-cublas-cu12 12.8, but torch requires this version. Hence, we need to overwrite the package with the newer version (no real issue).
+pip install --no-deps --force-reinstall nvidia-cublas-cu12>=12.9.1.4

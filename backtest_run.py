@@ -41,6 +41,8 @@ def backtest(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, 
     with open(file_name, "wb") as f:
         pickle.dump(output_dict, f)
 
+    plot_benchmark(file_name, "./backtest/backtest/" + experience_name  + '.png', fees=0.075/100)
+
 def offline_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, experience_name):
     test_type = "offline"
     data_kwargs = {}
@@ -70,10 +72,10 @@ def offline_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, levera
     file_name = "./backtest/offline_test/" + experience_name  + ".pkl"
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
-    plot_benchmark(file_name, "./backtest/offline_test/" + experience_name  + '.png', fees=0.075/100)
-
     with open(file_name, "wb") as f:
         pickle.dump(output_dict, f)
+
+    plot_benchmark(file_name, "./backtest/offline_test/" + experience_name  + '.png', fees=0.075/100)
 
 def online_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, experience_name):
     test_type = "online"
@@ -106,6 +108,8 @@ def online_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverag
 
     with open(file_name, "wb") as f:
         pickle.dump(output_dict, f)
+
+    plot_benchmark(file_name, "./backtest/online_test/" + experience_name  + '.png', fees=0.075/100)
 
 def bench_latency(max_trade_num ,policy_kwargs, experience_name):
     test_type = "online"
