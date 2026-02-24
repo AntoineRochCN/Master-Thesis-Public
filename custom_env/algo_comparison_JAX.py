@@ -15,10 +15,10 @@ from copy import deepcopy
 
 def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_timesteps, case_number, 
             stop_loss, stop_limit, ep_length, train_freq, alpha_0, gamma, target_entropy, batch_size, 
-            policy_delay, leverage, fees, path):
+            policy_delay, leverage, fees, path_train, path_test):
     
-    env = EnvDataBinance.create(path, ep_length=ep_length, stop_loss=stop_loss, stop_limit=stop_limit, leverage=leverage, transaction_cost=fees)
-    env_test = EnvDataBinance.create(path, ep_length=ep_length, stop_loss=stop_loss, stop_limit=stop_limit, seed=seed+1, leverage=leverage, transaction_cost=fees)
+    env = EnvDataBinance.create(path_train, ep_length=ep_length, stop_loss=stop_loss, stop_limit=stop_limit, leverage=leverage, transaction_cost=fees)
+    env_test = EnvDataBinance.create(path_test, ep_length=ep_length, stop_loss=stop_loss, stop_limit=stop_limit, seed=seed+1, leverage=leverage, transaction_cost=fees)
 
     obs_length = 20
     action_length = 1
@@ -142,7 +142,8 @@ def arg_maker(caso):
     fees = [0.075/100]
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    path = [os.path.join(current_dir, "..", "data", "transformed_test_data.npy")]
+    path_train = [os.path.join(current_dir, "..", "data", "transformed_test_data.npy")]
+    path_test = [os.path.join(current_dir, "..", "data", "transformed_test_data.npy")]
 
     match caso:
         ### debug
@@ -168,7 +169,7 @@ def arg_maker(caso):
 
     args = list(product(algo_nums, seed_list, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_timestep, [caso], 
                         stop_loss, stop_limit, ep_length, train_freq, alpha_0, gamma, target_entropy, batch_size, 
-                        policy_delay, leverage, fees, path))
+                        policy_delay, leverage, fees, path_train, path_test))
     
     return args
 
