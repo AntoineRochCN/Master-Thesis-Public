@@ -88,6 +88,9 @@ if __name__ == '__main__':
     caso = eval(input("Case: "))
     args = arg_maker(caso)
     print("Number of distinct simulations: ", len(args))
+    print("Parametrizations: ")
+    for arg in args:
+        print(arg)
     use_cuda = eval(input("Use cuda (0/1): "))
     if use_cuda == 0:
         import os

@@ -15,10 +15,8 @@ from copy import deepcopy
 
 def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_timesteps, case_number, 
             stop_loss, stop_limit, ep_length, train_freq, alpha_0, gamma, target_entropy, batch_size, 
-            policy_delay, leverage, fees):
-    print("New sim", " stop loss: ", stop_loss, ' leverage: ', leverage, " fees: ", fees)
-    path = "/home/aroch/Documents/Travail_Local/Uchile/Trabajo_Titulacion/Master-Thesis-Project/binance_scrapper_v0/transformed_data_bis.npy"
-
+            policy_delay, leverage, fees, path):
+    
     env = EnvDataBinance.create(path, ep_length=ep_length, stop_loss=stop_loss, stop_limit=stop_limit, leverage=leverage, transaction_cost=fees)
     env_test = EnvDataBinance.create(path, ep_length=ep_length, stop_loss=stop_loss, stop_limit=stop_limit, seed=seed+1, leverage=leverage, transaction_cost=fees)
 
@@ -129,7 +127,7 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
 
 
 def arg_maker(caso):
-    seed_list = [12345,32345,52345]
+    seed_list = [12345,22345, 32345, 42345, 52345]
     n_timestep = [10**6]
     ep_length = [3000]
     train_freq = [20]
@@ -143,8 +141,11 @@ def arg_maker(caso):
     leverage = [1.0]
     fees = [0.075/100]
 
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    path = [os.path.join(current_dir, "..", "data", "transformed_test_data.npy")]
+
     match caso:
-        ### CUSTOM
+        ### debug
         case 0: 
             seed_list = [12345]
             n_timestep = [10**4]
@@ -152,237 +153,50 @@ def arg_maker(caso):
             dist_obs_kwargs = [{"delta_max": 6, "mean": 2}]
             dist_act = ["test"]
             dist_act_kwargs = [{}]
-            algo_nums = [3]
+            algo_nums = [0,1,2,3]
 
-        case 1: ### test target entropy
-            seed_list = [12345]
-            #target_entropy = [jnp.log(3)*0.2, jnp.log(3)*0.4, jnp.log(3)*0.6]
-            target_entropy = [jnp.log(3)*0.2]
+        case 1:
+            stop_loss = [0.9,0.95,0.98]
+            stop_limit = [1.1,1.05,1.02]
+            leverage = [1.0,3.0,5.0]
+            fees = [0.0,0.02/100,0.075/100]
             dist_obs = ["measured_observation"]
             dist_obs_kwargs = [{}]
             dist_act = ["measured_action"]
             dist_act_kwargs = [{}]
-            algo_nums = [3]
-
-        case 2: ### test batch_size
-            target_entropy = [jnp.log(3)*0.2]
-            batch_size = [128,256,512]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}]
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}]
-            algo_nums = [3]
-
-        case 95: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            leverage = [1.0]
-            stop_loss = [0.95,0.98]
-            stop_limit = [1.02,1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [0]
-
-        case 96: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            leverage = [1.0]
-            stop_loss = [0.95,0.98]
-            stop_limit = [1.02,1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [1]
-
-        case 97: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            leverage = [1.0]
-            stop_loss = [0.95,0.98]
-            stop_limit = [1.02,1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [2]
-
-        #### REAL TESTS
-
-        case 98: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [12345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.95]
-            stop_limit = [1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-
-        case 99: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [12345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.98]
-            stop_limit = [1.02]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-
-        case 100: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [22345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.95]
-            stop_limit = [1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-
-        case 101: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [22345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.98]
-            stop_limit = [1.02]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-        
-        case 102: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [32345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.95]
-            stop_limit = [1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-
-        case 103: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [32345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.98]
-            stop_limit = [1.02]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-        
-        case 104: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [42345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.95]
-            stop_limit = [1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-
-        case 105: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [42345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.98]
-            stop_limit = [1.02]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-        
-        case 106: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [52345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.95]
-            stop_limit = [1.05]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
-
-        case 107: ### NEED TO BENCH LATENCY MEGA OVER BIG FINAL TEST
-            ### Remember to take latest data
-            seed_list = [52345]
-            leverage = [1.0, 3.0, 5.0]
-            stop_loss = [0.98]
-            stop_limit = [1.02]
-            fees = [0.0, 0.02/100, 0.075/100]
-            dist_obs = ["measured_observation"]
-            dist_obs_kwargs = [{}] ### real latency
-            dist_act = ["measured_action"]
-            dist_act_kwargs = [{}] ### real latency
-            algo_nums = [3]
+            algo_nums = [0,1,2,3]
 
     args = list(product(algo_nums, seed_list, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_timestep, [caso], 
                         stop_loss, stop_limit, ep_length, train_freq, alpha_0, gamma, target_entropy, batch_size, 
-                        policy_delay, leverage, fees))
-    for arg in args:
-        print(arg)
+                        policy_delay, leverage, fees, path))
+    
     return args
 
 if __name__ == '__main__':
-    caso_min = eval(input("Case min: "))
-    caso_max = eval(input("Case max: "))
+    caso = eval(input("Case: "))
     use_cuda = eval(input("Use cuda (0/1): "))
     if use_cuda == 0:
         import os
-        """
-        os.environ["XLA_FLAGS"] = (
-            "--xla_cpu_multi_thread_eigen=true "
-            "intra_op_parallelism_threads=1 "
-            "inter_op_parallelism_threads=1"
-            )
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
-        """
         os.environ["JAX_PLATFORMS"] = "cpu"
-        
         import jax
     elif use_cuda == 1:
         pass
     else:
         assert False, "Not a good cuda value, ending the program"
-    n_max_sim = 25
     n_thread = eval(input("Number of threads: "))
 
-    for caso in range(caso_min, caso_max + 1):
-        args = arg_maker(caso)
-        if caso == caso_min:
-            mp.set_start_method('spawn')
-        with mp.Pool(n_thread) as p:
-            result = p.starmap(run_sim, args)
+    args = arg_maker(caso)
+    
+    print("Number of distinct simulations: ", len(args))
+    print("Parametrizations: ")
+    for arg in args:
+        print(arg)
 
-        print(result)
-        print(caso)
-        with open("./algo_comparison/sim_number_{}/results.json".format(caso), 'w') as file:
-            json.dump(result, file)
+    mp.set_start_method('spawn')
+    with mp.Pool(n_thread) as p:
+        result = p.starmap(run_sim, args)
 
-        print("End of case ", caso)
+    with open("./algo_comparison/sim_number_{}/results.json".format(caso), 'w') as file:
+        json.dump(result, file)
+
+    print("End of case ", caso)
