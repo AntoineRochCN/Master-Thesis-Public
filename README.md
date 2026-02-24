@@ -51,6 +51,47 @@ The data is almost trained raw:
   - Since the action space is discrete ($\{0, 1, 2\}$), the SAC had to be modified to predict discrete actions. This leads to some variations in the output of the critic and policy networks, along with other kind of behavior of the losses / the entropy.
   - Understanding how trading works is a hard task for a RL algorithm, and it struggles generating good observations. To deal with that problem, a first warmup step is set overfitting the environment over the best actions found within dynamic programming.
 
+## How to run simulations
+
+### Getting the data
+
+### For the DADAC results verification
+
+To verify DADAC's results (and the comparison with other algorithm), one can run parallel_run.py the following way:
+```bash
+python parallel_run.py
+```
+The results will be store in the folder parallel_run/sim_number_... according to the simulation you are doing. \
+The simulation 0 verifies there's no definition bug in the objects. \
+The simulation 1, 2 and 3 correspond to the simulations made to match the experiments made in DADAC. \
+One can create its own simulation parametrization making a new case, but not all hyperparameters are directly available. Moreover, one can define a new latency distribution for the actions or observations in the function utils_env/get_latency_prop. \
+When launching a simulation, it is proposed to use CUDA or not, and the number of threads to use. I would recommend at least 5 threads using CUDA to maximize the GPU utilization (done on a RTX 3080ti laptop), and to speed up the whole testing, one can run another simulation on CPU this time, using 2 or 3 threads. Using too many threads leads to concurrency over RAM and GPU usage, leading to a drop in performance.
+
+### For the trading environment training
+
+The same logic was implemented for the custom environment:
+```bash
+cd custom_env
+python algo_comparison_JAX.py
+```
+Similarly as before, the simulations will be stored in the folder algo_comparison/sim_number_... \
+Yet, this time, it is required to provide a data path for the training data, which aren't available on this GitHub repository for size issues, so one has to scrap them before. \
+This time, it is not recommended to run multiple threads at a time, since JAX uses the GPU more efficiently.
+
+### For backtesting
+
+To run a backtest, one can use the following:
+```bash
+python backtest_run.py
+```
+It will propose 4 cases:
++ 0: run an offline backtest on local data. The data path has to be provided.
++ 1: run an offline backtest on online data. The algorithm will connect to the Binance websocket and run until it reaches a stop limit / loss or the number of required timesteps (1 timestep is roughly 100ms).
++ 2: run an online backtest on online data. This time, the algorithm the trades chosen by the algorithm are sent to Binance. The default trading value is around 6€ (corresponds to the minimum value of a trade). One has to provide its API keys in a .env file (BINANCE_API_KEY and BINANCE_API_SECRET). 
++ 3: bench the latency between the local computer and the Binance websocket.
+In every case, when using DADAC, one has to provide the path of a saved model. The default corresponds to an untrained model.
+
+
 ## Repo Structure
 
 ```text

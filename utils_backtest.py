@@ -21,6 +21,7 @@ from gymnasium.spaces import Box
 from flax import serialization
 import pickle
 import matplotlib.pyplot as plt
+from sklearn.neighbors import KernelDensity
 
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 
@@ -606,3 +607,101 @@ def plot_benchmark(load_path, save_path, fees):
 
     fig.tight_layout()
     fig.savefig(save_path, dpi = 300)
+
+
+def plot_bench_latency(load_path, save_path):
+    with open(load_path, 'rb') as f:
+        x = pickle.load(f)
+        x = x["timestamps"]
+        extracted_tms = x[np.any(x, axis=1)]
+
+    latency =(extracted_tms[:,-1] - extracted_tms[:,0]).reshape((-1,1))
+    q_max = np.quantile(latency, 0.95)
+    latency = latency[latency < q_max]
+
+    kde = KernelDensity(kernel="gaussian", bandwidth=10).fit(latency)
+
+    max_idx = int(np.max(latency) * 1.1)
+    x = np.linspace(0,max_idx,10000)
+
+    density = np.exp(kde.score_samples(x.reshape((-1,1))))
+
+    x_discretized = (x + 50) //100
+
+    density_discretized = np.array([abs(np.trapz(density[x_discretized == k], x = x[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
+
+    C = np.trapz(density,  x= x / 100 + 1)
+
+    plt.plot(x / 100, density / C,  c = 'r', label = "Smoothed distribution using KDE")
+    plt.bar(np.arange(len(density_discretized)), height = density_discretized, width = 0.8, label = "Discretized latency distribution")
+
+    plt.xlim(-0.1, max_idx)
+    plt.grid()
+    plt.xlabel("Latency (timesteps of 100 ms)")
+    plt.ylabel("Density function")
+    plt.title("Measured latency distribution")
+    plt.legend()
+    plt.savefig(save_path + "/total_latency.png", dpi = 300)
+    plt.close()
+
+    diff = extracted_tms[:, 1:] - extracted_tms[:, :-1]
+    local_latency = diff[:,1] + diff[:,2]
+    x, y = np.unique(local_latency[local_latency < 100], return_counts=True)
+    plt.grid()
+    plt.xlabel(r"Prediction latency ($\mu s$)")
+    plt.ylabel(r"Density function")
+    plt.title("Data processing latency")
+    plt.bar(x, y / np.sum(y))
+    plt.savefig(save_path + "/prediction_latency.png", dpi = 300)
+    plt.close()
+
+    latency_obs = np.sum(diff[:,:2], axis = 1)
+    latency_act = diff[:,3]
+
+    kde_obs = KernelDensity(kernel="gaussian", bandwidth=10).fit(latency_obs.reshape(-1,1))
+    kde_act = KernelDensity(kernel="gaussian", bandwidth=10).fit(latency_act.reshape(-1,1))
+
+    max_timestep = int(max(np.max(latency_obs), np.max(latency_act)) * 1.1)
+
+    x_grid = np.linspace(0,max_timestep,1000)
+
+    density_obs = np.exp(kde_obs.score_samples(x_grid.reshape(-1,1)))
+    density_act = np.exp(kde_act.score_samples(x_grid.reshape(-1,1)))
+
+    discrete_grid = x_grid/100
+    C_obs = np.trapz(density_obs, x = discrete_grid)
+    C_act = np.trapz(density_act, x = discrete_grid)
+
+    x_discretized = (x_grid + 50) //100
+    density_discretized_obs = np.array([abs(np.trapz(density_obs[x_discretized == k], x = x_grid[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
+    density_discretized_act = np.array([abs(np.trapz(density_act[x_discretized == k], x = x_grid[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
+
+    plt.plot(discrete_grid, density_obs / C_obs, label = "Smoothed observation latency")
+    plt.plot(discrete_grid, density_act / C_act, label = "Smoothed action latency")
+
+    plt.bar(np.arange(x_grid[-1] // 100) - 0.05, height = density_discretized_obs, width = 0.1, label = "Discretized latency \ndistribution - observations")
+    plt.bar(np.arange(x_grid[-1] // 100) + 0.05, height = density_discretized_act, width = 0.1, label = "Discretized latency \ndistribution - actions")
+
+    plt.legend(loc = "upper left", prop={'size': 8})
+    plt.grid()
+    plt.xlabel("Timesteps of 100 ms")
+    plt.ylabel("Density function")
+    plt.title("Measured observation and action latency distributions")
+    plt.savefig(save_path + "/detailed_latency.png", dpi = 300)
+
+    print("-" * 10)
+    print("Observervation latency distribution: ")
+    print(density_discretized_obs)
+    print("-" * 10)
+    print("Action latency distribution: ")
+    print(density_discretized_act)
+    print("-" * 10)
+    print("Total latency distribution: ")
+    print(density_discretized)
+    print("-" * 10)
+
+    output_dict = {"observation_latency" : density_discretized_obs, "action_latency": density_discretized_act, "total_latency": density_discretized}
+
+    with open(save_path + "/record.pkl", "wb") as f:
+        pickle.dump(output_dict, f)
+

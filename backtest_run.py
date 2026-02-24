@@ -126,6 +126,8 @@ def bench_latency(max_trade_num ,policy_kwargs, experience_name):
     with open(file_name, "wb") as f:
         pickle.dump(output_dict, f)
 
+    plot_benchmark(file_name, "./backtest/benchmark/" + experience_name)
+
 
 if __name__ == '__main__':
     test_case = eval(input("What to do? \n0: backtest\n1: offline testing\n2: online testing\n3: latency benchmark\n"))
