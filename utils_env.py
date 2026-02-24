@@ -129,7 +129,7 @@ class LatencyEnv(gym.Wrapper):
         assert self.spec.max_episode_steps != None
 
     def _init_time_shifts(self):
-        n_max = self.spec.max_episode_steps + self.max_latency_action + self.max_latency_observation + 3
+        n_max = self.spec.max_episode_steps + (self.max_latency_action + self.max_latency_observation)*3
         tau = np.random.choice(self.latence_range_action, p = self.latence_probabilities_action, size=n_max)
         tau_prime = np.random.choice(self.latence_range_observation, p = self.latence_probabilities_observation, size=n_max)
 
