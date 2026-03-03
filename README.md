@@ -83,6 +83,47 @@
     - Since the action space is discrete ($\{0, 1, 2\}$), the SAC had to be modified to predict discrete actions. This leads to some variations in the output of the critic and policy networks, along with other kind of behavior of the losses / the entropy.
     - **Warmup**: Understanding how trading works is a hard task for a RL algorithm. To deal with that problem, a first warmup step is set overfitting the environment over the best actions found within dynamic programming.
 
+  ### 4. Some results
+
+  Here lies the comparison between the results depicted in the DADAC's paper and the simulation reproduced here. The simulation's results might be slighlty higher due to some variations in the implementation, but they do underline the quality of the idea presented in the DADAC.
+
+  <em>Note: Blue: DADAC; Red: DSAC, Green: SAC+VC, Orange: SAC.</em>
+  <table align="center">
+    <tr>
+      <td align="center">
+        <img src="img_readme/DADAC_gamma.png" width="100%" />
+        <br>
+        <b>Latency Gamma (article)</b>
+      </td>
+      <td align="center">
+        <img src="img_readme/DADAC_gaussian.png" width="100%" />
+        <br>
+        <b>Latency Gaussian (article)</b>
+      </td>
+    </tr>
+  </table>
+  <table align="center">
+    <tr>
+      <td align="center">
+        <img src="img_readme/case_0.png" width="100%" />
+        <br>
+        <b>Latency Gamma (simulation)</b>
+      </td>
+      <td align="center">
+        <img src="img_readme/case_4.png" width="100%" />
+        <br>
+        <b>Latency Gaussian (simulation)</b>
+      </td>
+      <td align="center">
+        <img src="img_readme/case_2.png" width="100%" />
+        <br>
+        <b>Latency Uniform (simulation)</b>
+      </td>
+    </tr>
+  </table>
+
+  
+
   ---
 
   ## Detailed Usage Guide
