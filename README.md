@@ -122,8 +122,6 @@
     </tr>
   </table>
 
-  
-
   ---
 
   ## Detailed Usage Guide

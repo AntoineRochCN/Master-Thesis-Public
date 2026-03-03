@@ -16,4 +16,4 @@ tensorflow_probability>=0.25.0
 torch==2.10.0+cu128
 websockets==15.0.1
 tensorboard>=2.16.0
-
+scikit-learn>=1.2
