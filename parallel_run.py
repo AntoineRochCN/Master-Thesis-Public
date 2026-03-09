@@ -69,7 +69,7 @@ def arg_maker(caso):
             dist_act_kwargs = [{}]
             algo_nums = [0,1,2,3]
             env = env_names
-            n_timestep = [10**3]
+            n_timestep = [10**4]
 
         ### Example of a simulation
         case 1: 

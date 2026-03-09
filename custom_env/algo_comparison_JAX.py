@@ -38,7 +38,7 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
             buffer_size = int(10**6)
             pos = 0
         
-            full = jnp.zeros(1, dtype=jnp.float32)
+            full = False
 
             latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
                                                     distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
@@ -48,15 +48,14 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
             
             buffer = jnp.empty((buffer_size,shape), dtype=jnp.float32)
             buffer = CustomBufferBis(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full)
-            DISRESPECT_THE_ENV = foolish_env(obs_length,3)
-            model = SAC_delayed_JAX("DiscretePolicy", DISRESPECT_THE_ENV, env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
+            model = SAC_delayed_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
         case 1:
             buffer_size = int(10**6)
             pos = 0
         
-            full = jnp.zeros(1, dtype=jnp.float32)
+            full = False
 
             latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
                                                     distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
@@ -66,15 +65,14 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
             
             buffer = jnp.empty((buffer_size, max_latency,shape), dtype=jnp.float32)
             buffer = CustomBufferLatency(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full, max_latency =max_latency)
-            DISRESPECT_THE_ENV = foolish_env(obs_length,3)
-            model = SAC_VC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
+            model = SAC_VC_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
         case 2:
             buffer_size = int(10**6)
             pos = 0
         
-            full = jnp.zeros(1, dtype=jnp.float32)
+            full = False
 
             latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
                                                     distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
@@ -84,8 +82,7 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
             
             buffer = jnp.empty((buffer_size,shape), dtype=jnp.float32)
             buffer = CustomBufferBis(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full)
-            DISRESPECT_THE_ENV = foolish_env(obs_length,3)
-            model = DSAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
+            model = DSAC_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
         case 3:
@@ -102,8 +99,7 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
             
             buffer = jnp.empty((buffer_size, max_latency,shape), dtype=jnp.float32)
             buffer = CustomBufferLatency(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full, max_latency =max_latency)
-            DISRESPECT_THE_ENV = foolish_env(obs_length,3)
-            model = DADAC_JAX("DiscretePolicy", DISRESPECT_THE_ENV, env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
+            model = DADAC_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
             
@@ -156,11 +152,25 @@ def arg_maker(caso):
             dist_act_kwargs = [{}]
             algo_nums = [0,1,2,3]
 
+        ### Extended case to cover many hyperparameters
         case 1:
             stop_loss = [0.9,0.95,0.98]
             stop_limit = [1.1,1.05,1.02]
             leverage = [1.0,3.0,5.0]
             fees = [0.0,0.02/100,0.075/100]
+            dist_obs = ["measured_observation"]
+            dist_obs_kwargs = [{}]
+            dist_act = ["measured_action"]
+            dist_act_kwargs = [{}]
+            algo_nums = [0,1,2,3]
+
+        ### Restricted case for simulation purposes
+        case 2:
+            seed_list = [12345, 32345, 52345]
+            stop_loss = [0.95,0.98]
+            stop_limit = [1.05,1.02]
+            leverage = [1.0,3.0,5.0]
+            fees = [0.02/100,0.075/100]
             dist_obs = ["measured_observation"]
             dist_obs_kwargs = [{}]
             dist_act = ["measured_action"]

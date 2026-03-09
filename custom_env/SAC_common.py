@@ -1,7 +1,13 @@
-from .env import EnvDataBinance, JaxLatencyEnv, reset_latency_env, step_latency_env, reset_step_carry, update_latency_buffer, erase_coming_obs, erase_first_obs, step_env
-from .record_utils import TestRecord, LossRecord, EnvRecord, update_env_rec
-from .buffer import CustomBufferBis
-from .discrete_policy import RLTrainState, TrainState
+try:
+    from env import EnvDataBinance, JaxLatencyEnv, reset_latency_env, step_latency_env, reset_step_carry, update_latency_buffer, erase_coming_obs, erase_first_obs, step_env
+    from record_utils import TestRecord, LossRecord, EnvRecord, update_env_rec
+    from buffer import CustomBufferBis
+    from discrete_policy import RLTrainState, TrainState
+except:
+    from .env import EnvDataBinance, JaxLatencyEnv, reset_latency_env, step_latency_env, reset_step_carry, update_latency_buffer, erase_coming_obs, erase_first_obs, step_env
+    from .record_utils import TestRecord, LossRecord, EnvRecord, update_env_rec
+    from .buffer import CustomBufferBis
+    from .discrete_policy import RLTrainState, TrainState
 from functools import partial
 import jax
 from jax import lax

@@ -92,6 +92,12 @@ def get_latency_prop(distribution, **kwargs):
             latence_probabilities /= np.sum(latence_probabilities)
             latence_probabilities *= 0.99
             latence_probabilities[-1] = 0.01
+        case "measured_observation":
+            latence_probabilities = np.array([0.0, 0.97067666, 0.01768216, 0.01164118])
+            latence_range = np.arange(4)
+        case "measured_action":
+            latence_probabilities = np.array([0.0, 0.25225046, 0.74449818, 0.00325136])
+            latence_range = np.arange(4)
         case "custom":
             raise NotImplementedError
     return LatencyDistribution(latence_range, latence_probabilities, max(int(np.max(latence_range)) - 1, 0))
