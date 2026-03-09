@@ -135,21 +135,15 @@ class LatencyEnv(gym.Wrapper):
 
         self.t_start = tau[0] + tau_prime[0]
         
-        self.mask_actions = np.zeros(n_max + self.max_latency_action + 2, dtype=np.bool)
         self.mask_next_observations = np.zeros(n_max + self.max_latency_action + self.max_latency_observation + 3, dtype=np.bool)
 
-        self.action_shift = np.arange(n_max) + tau + 1
         self.next_obs_shift = np.arange(n_max) + tau + tau_prime + 1
 
-        vals, idx_act = last_pos_np(self.action_shift)
         vals_bis, idx_obs = last_pos_np(self.next_obs_shift)
-        self.idx_act = n_max - 1 - idx_act
         self.idx_obs = n_max - 1 - idx_obs
 
-        self.vals_action = vals
         self.vals_obs = vals_bis
 
-        self.mask_actions[self.idx_act] = True
         self.mask_next_observations[self.idx_obs] = True
         
     def _init_buffers(self):
@@ -219,7 +213,7 @@ class LatencyEnv(gym.Wrapper):
             self.ret_ind += 1
             info_ret["num_ret"] += 1
 
-        info_ret["flag_compute_action"] = self.mask_actions[self.timestep]
+        info_ret["flag_compute_action"] = self.mask_next_observations[self.timestep]
         info_ret["observation"] = self.obs_buffer[self.timestep]
         info_ret["done"] = self.done_buffer[self.timestep]
         self.timestep += 1
