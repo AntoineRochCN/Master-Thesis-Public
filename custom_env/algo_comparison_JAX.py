@@ -24,7 +24,7 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
     action_length = 1
     shape = 2*obs_length + 3
     eval_freq = 5000
-    n_eval = 50
+    n_eval = 10
     log_interval = 100
 
     save_dir = "./algo_comparison/sim_number_{}/".format(case_number)
@@ -32,71 +32,39 @@ def run_sim(caso, seed, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_
     simulation_list = ["SAC", "SAC_VC", "DSAC", "DADAC"]
     simulation_type = simulation_list[caso]
 
-    match caso:
-        
-        case 0:
-            buffer_size = int(10**6)
-            pos = 0
-        
-            full = False
+    buffer_size = int(10**6)
+    pos = 0
+    full = False
 
-            latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
-                                                    distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
-                                                    seed=seed, action_dim=action_length, obs_dim=obs_length, max_ep_length=ep_length)
-            latency_manager_test = deepcopy(latency_manager)
-            max_latency = int(latency_manager.merged_dist.max_latency + 2)
-            
+    latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
+                                            distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
+                                            seed=seed, action_dim=action_length, obs_dim=obs_length, max_ep_length=ep_length)
+    latency_manager_test = deepcopy(latency_manager)
+    max_latency = int(latency_manager.merged_dist.max_latency + 2)
+
+    match caso:
+        case 0:
             buffer = jnp.empty((buffer_size,shape), dtype=jnp.float32)
             buffer = CustomBufferBis(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full)
             model = SAC_delayed_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
-        case 1:
-            buffer_size = int(10**6)
-            pos = 0
-        
-            full = False
-
-            latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
-                                                    distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
-                                                    seed=seed, action_dim=action_length, obs_dim=obs_length, max_ep_length=ep_length)
-            latency_manager_test = deepcopy(latency_manager)
-            max_latency = int(latency_manager.merged_dist.max_latency + 2)
             
+        case 1:
             buffer = jnp.empty((buffer_size, max_latency,shape), dtype=jnp.float32)
             buffer = CustomBufferLatency(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full, max_latency =max_latency)
             model = SAC_VC_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
-        case 2:
-            buffer_size = int(10**6)
-            pos = 0
-        
-            full = False
-
-            latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
-                                                    distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
-                                                    seed=seed, action_dim=action_length, obs_dim=obs_length, max_ep_length=ep_length)
-            latency_manager_test = deepcopy(latency_manager)
-            max_latency = int(latency_manager.merged_dist.max_latency + 2)
             
+        case 2:
             buffer = jnp.empty((buffer_size,shape), dtype=jnp.float32)
             buffer = CustomBufferBis(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full)
             model = DSAC_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
                 policy_kwargs=dict(net_arch=[256, 256, 256], activation_fn = jax.nn.gelu), learning_rate=1e-4, policy_delay=policy_delay, learning_starts= 10000//train_freq, buffer_size=1000000, tau = 0.005,
                 train_freq=train_freq, seed=seed, gradient_steps=1, action_noise=None, alpha_0=alpha_0, gamma=gamma, target_entropy=target_entropy, learning_rate_alpha=1e-4, batch_size=batch_size)
-        case 3:
-            buffer_size = int(10**6)
-            pos = 0
-        
-            full = False
-
-            latency_manager = JaxLatencyEnv.create(distribution_action=dist_act, dist_action_kwargs=dist_act_kwargs,
-                                                    distribution_obs=dist_obs, dist_obs_kwargs=dist_obs_kwargs,
-                                                    seed=seed, action_dim=action_length, obs_dim=obs_length, max_ep_length=ep_length)
-            latency_manager_test = deepcopy(latency_manager)
-            max_latency = int(latency_manager.merged_dist.max_latency + 2)
             
+        case 3:
             buffer = jnp.empty((buffer_size, max_latency,shape), dtype=jnp.float32)
             buffer = CustomBufferLatency(buffer=buffer, pos = pos, buffer_size=buffer_size, full=full, max_latency =max_latency)
             model = DADAC_JAX("DiscretePolicy", env, env_test, latency_manager, latency_manager_test, buffer, tensorboard_log=save_dir, replay_buffer_class=None,
@@ -138,7 +106,7 @@ def arg_maker(caso):
     fees = [0.075/100]
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    path_train = [os.path.join(current_dir, "..", "data", "transformed_test_data.npy")]
+    path_train = [os.path.join(current_dir, "..", "data", "transformed_train_data.npy")]
     path_test = [os.path.join(current_dir, "..", "data", "transformed_test_data.npy")]
 
     match caso:
@@ -175,7 +143,7 @@ def arg_maker(caso):
             dist_obs_kwargs = [{}]
             dist_act = ["measured_action"]
             dist_act_kwargs = [{}]
-            algo_nums = [0,1,2,3]
+            algo_nums = [0,3]
 
     args = list(product(algo_nums, seed_list, dist_obs, dist_obs_kwargs, dist_act, dist_act_kwargs, n_timestep, [caso], 
                         stop_loss, stop_limit, ep_length, train_freq, alpha_0, gamma, target_entropy, batch_size, 
