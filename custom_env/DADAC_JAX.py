@@ -437,11 +437,11 @@ class DADAC_JAX(SAC):
             ratio1 = jnp.clip(new_means_std[None, 0, :] ** 2 / (q1_std_detach ** 2 + bias), 0.1,10) # (B, |A|)
             ratio2 = jnp.clip(new_means_std[None, 1, :] ** 2 / (q2_std_detach ** 2 + bias), 0.1,10) # (B, |A|)
 
-            L_mean_1 = ratio1[jnp.arange(actions.shape[0]), actions.astype(jnp.int32).squeeze(-1)] * optax.losses.huber_loss(observed_q_values[0] , target_Q_values, 1) # (B)
-            L_mean_2 = ratio2[jnp.arange(actions.shape[0]), actions.astype(jnp.int32).squeeze(-1)] * optax.losses.huber_loss(observed_q_values[1] , target_Q_values, 1) # (B)
+            L_mean_1 = ratio1[jnp.arange(actions.shape[0]), actions.astype(jnp.int32).squeeze(-1)] * optax.losses.huber_loss(observed_q_values[0] , target_Q_values, delta=1.0) # (B)
+            L_mean_2 = ratio2[jnp.arange(actions.shape[0]), actions.astype(jnp.int32).squeeze(-1)] * optax.losses.huber_loss(observed_q_values[1] , target_Q_values, delta=1.0) # (B)
             
-            L_var_1 = ratio1 * q1_std / (q1_std_detach + bias) * (q1_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[0]), target_q_bound_1, 1)) #(B, |A|)
-            L_var_2 = ratio2 * q2_std / (q2_std_detach + bias) * (q2_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[1]), target_q_bound_2, 1)) # (B, |A|)
+            L_var_1 = ratio1 * q1_std / (q1_std_detach + bias) * (q1_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[0]), target_q_bound_1, delta=1.0)) #(B, |A|)
+            L_var_2 = ratio2 * q2_std / (q2_std_detach + bias) * (q2_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[1]), target_q_bound_2, delta=1.0)) # (B, |A|)
             
             q1_loss = L_mean_1.mean() + L_var_1.sum(axis = 1).mean()
             q2_loss = L_mean_2.mean() + L_var_2.sum(axis = 1).mean()

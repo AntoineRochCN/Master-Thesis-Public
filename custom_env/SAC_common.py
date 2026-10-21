@@ -87,17 +87,60 @@ def rollout_for_test(env_test: EnvDataBinance, actor_state, latency_manager_test
         )
     return env_test, latency_manager_test, final_reward, ep_len, pf_value, sharpe, ratio_to_opt
 
-@partial(jax.jit, static_argnames=["eval_num"])
-def eval_policy_env(env_test: EnvDataBinance, eval_num, actor_state, test_rec: TestRecord, latency_manager_test: JaxLatencyEnv):
+def single_eval_episode(eval_key, env_test: EnvDataBinance, latency_manager_test: JaxLatencyEnv, actor_state):
+    keys = jax.random.split(eval_key, 2 + env_test.ep_length)
+    reset_key, scan_keys = keys[0], keys[1:1+env_test.ep_length]
+    step_carry = reset_step_carry(env_test, reset_key, compute_oracle=True)
+    latency_manager, _, _ = reset_latency_env(latency_manager_test, step_carry.current_obs)
+
+    def scan_body(items, keys_for_step):
+        step_carry = items[0]
+        current_obs = step_carry.current_obs
+        latency_manager_test = items[1]
+        past_done = items[2]
+        cumulated_reward = items[3]
+        current_ep_len = items[4]
+        pf_value = items[5]
+        
+        sample_key = keys_for_step
+
+        dist = actor_state.apply_fn(actor_state.params, current_obs)
+        action = jax.lax.select(latency_manager_test.carry.do_action, dist.sample(1, seed = sample_key)[0], latency_manager_test.carry.past_action)
+        
+        new_obs, reward, done, truncated, step_carry = step_env(step_carry, action)
+        done_or_trunc = jnp.logical_or(done, truncated)
+
+        latency_manager_test, _, _, _ = step_latency_env(latency_manager_test, current_obs, new_obs, action, reward, done_or_trunc, past_done)
+
+        cumulated_reward = cumulated_reward + reward[0] * (1-past_done)
+        pf_value = new_obs[0, 16] * (1-past_done) + pf_value * past_done
+        market_val = (new_obs[0, 0] / 100 + 1) * (1-past_done) + (new_obs[0, 0] / 100 + 1) * past_done
+        
+        return (step_carry, latency_manager_test, done_or_trunc | past_done, cumulated_reward, current_ep_len + (1-past_done), pf_value), (pf_value, market_val)
     
-    def run_single_episode(items, nothing):
-        env = items[0]
-        latency_manager = items[1]
-        env, latency_manager, final_reward, ep_len, pf_value, sharpe, opt_ratio = rollout_for_test(env, actor_state, latency_manager)
+    (step_carry, latency_manager_test, done, final_reward, ep_len, pf_value), (pf_vals, raw_rets) = lax.scan(
+        scan_body, (step_carry, latency_manager, False, 0.0, 0.0, 1.0), scan_keys
+    )
+    
+    ep_len_safe = jnp.maximum(ep_len, 1.0)
+    mean = jnp.sum(pf_vals - raw_rets) / ep_len_safe
+    mean_2 = jnp.sum((pf_vals - raw_rets) ** 2) / ep_len_safe
+    variance = jnp.maximum(mean_2 - mean**2, 1e-8)
+    sharpe = mean / jnp.sqrt(variance)
+    opt_val = jnp.maximum(step_carry.opt_pf_states[-1] / 100 + 1, 1e-8)
+    ratio_to_opt = pf_value / opt_val
 
-        return (env, latency_manager), (final_reward, ep_len, pf_value, sharpe, opt_ratio)
+    return final_reward, ep_len, pf_value, sharpe, ratio_to_opt
 
-    (env_test, latency_manager_test), (ret_reward, ret_len, ret_pf, ret_sharpe, ret_opt_ratio) = lax.scan(run_single_episode, (env_test, latency_manager_test), xs = jnp.arange(eval_num))
+@partial(jax.jit, static_argnames=["eval_num"])
+def eval_policy_env(env_test: EnvDataBinance, eval_num: int, actor_state, test_rec: TestRecord, latency_manager_test: JaxLatencyEnv):
+    keys = jax.random.split(env_test.key, eval_num + 1)
+    env_key, eval_keys = keys[0], keys[1:]
+    
+    vmapped_eval = jax.vmap(single_eval_episode, in_axes=(0, None, None, None))
+    ret_reward, ret_len, ret_pf, ret_sharpe, ret_opt_ratio = vmapped_eval(
+        eval_keys, env_test, latency_manager_test, actor_state
+    )
     pos = test_rec.pos
     
     new_rew_mat = jax.lax.dynamic_update_slice(
@@ -139,7 +182,11 @@ def eval_policy_env(env_test: EnvDataBinance, eval_num, actor_state, test_rec: T
         pos=pos + 1
     )
 
-    return new_test_rec, env_test, latency_manager_test
+    new_step_carry = reset_step_carry(env_test, env_key)
+    new_lat_man, _, _ = reset_latency_env(latency_manager_test, new_step_carry.current_obs)
+    env_test = env_test.replace(step_carry=new_step_carry, key=env_key)
+
+    return new_test_rec, env_test, new_lat_man
 
 
 @partial(jax.jit, static_argnames = ["n_steps", "buffer_shape"], donate_argnames = ["env", "tmp_buffer", "env_rec"])
@@ -184,7 +231,7 @@ def rollout_VC(env: EnvDataBinance, n_steps, buffer_shape, actor_state, env_rec:
     (tmp_buffer, pos, init_pos, step_carry, env_rec, latency_manager, done_or_trunc, full), _ = lax.scan(scan_body, 
                                                                                                             (tmp_buffer, buf_pos, buf_pos_init, step_carry, env_rec, latency_manager, False, full), 
                                                                                                             all_keys, 
-                                                                                                            unroll=2)
+                                                                                                            unroll=4)
     
     return (tmp_buffer, pos, init_pos, step_carry, env_rec, latency_manager, done_or_trunc, full, reset_key, key) 
 
@@ -232,14 +279,14 @@ def rollout_std(env: EnvDataBinance, n_steps, buffer_shape, actor_state, env_rec
     (tmp_buffer, pos, init_pos, step_carry, env_rec, latency_manager, done_or_trunc, full), _ = lax.scan(scan_body, 
                                                                                                             (tmp_buffer, buf_pos, buf_pos_init, step_carry, env_rec, latency_manager, False, full), 
                                                                                                             all_keys, 
-                                                                                                            unroll=2)
+                                                                                                            unroll=4)
     
     return (tmp_buffer, pos, init_pos, step_carry, env_rec, latency_manager, done_or_trunc, full, reset_key, key) 
 
 @partial(jax.jit, donate_argnames=["tmp_buffer", "env_rec", "step_carry", "latency_manager"])
 def on_done_processor_std(tmp_buffer, env_rec, step_carry, latency_manager, reset_key, env):
     new_env_rec = update_env_rec(env_rec, step_carry.timestep, step_carry.pf_value)
-    new_step_carry = reset_step_carry(env, reset_key)
+    new_step_carry = reset_step_carry(env, reset_key, compute_oracle=False)
     new_latency_manager, _, _ = reset_latency_env(latency_manager, step_carry.current_obs)
     
     return tmp_buffer, new_env_rec, new_step_carry, new_latency_manager
@@ -253,7 +300,7 @@ def on_done_processor_VC(tmp_buffer, env_rec, step_carry, latency_manager, reset
     tmp_buffer = erase_first_obs(tmp_buffer, tmp_buffer_pos, max_latency, buffer_shape, init_pos, ep_length)
     
     env_rec = update_env_rec(env_rec, step_carry.timestep, step_carry.pf_value)
-    step_carry = reset_step_carry(env, reset_key)
+    step_carry = reset_step_carry(env, reset_key, compute_oracle=False)
     latency_manager, _, _ = reset_latency_env(latency_manager, step_carry.current_obs)
     
     return tmp_buffer, env_rec, step_carry, latency_manager

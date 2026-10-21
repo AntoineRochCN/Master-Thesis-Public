@@ -52,23 +52,11 @@ class CustomBufferLatency:
     @staticmethod
     @partial(jax.jit, static_argnames = ["batch_size", "obs_dim", "max_latency", "act_dim"])
     def sample(buf, batch_size, pos, key, discounts, obs_dim, full, buffer_size, max_latency, act_dim):
-        key, gen_key_1, gen_key_2 = jax.random.split(key, 3)
-        v_min_1 = 0
-        v_max_1 = jnp.maximum(pos - max_latency, 0)
-
-        q_2 = jnp.floor(((1 - (pos + max_latency)/ buffer_size) * batch_size)  * full)
-        q_1 = batch_size - q_2
-
-        idx_1 = jax.random.randint(gen_key_1, batch_size, v_min_1, v_max_1)
-
-        v_min_2 = jnp.minimum(pos + max_latency, buffer_size)
-        v_max_2 = buffer_size
-        
-        idx_2 = jax.random.randint(gen_key_2, batch_size, v_min_2, v_max_2)
-
-        arr_idx = jnp.arange(batch_size)
-        mask = arr_idx < q_1
-        idx = jnp.where(mask, idx_1, idx_2)
+        key, gen_key = jax.random.split(key)
+        valid_len = jnp.where(full, buffer_size - 2 * max_latency, jnp.maximum(pos - max_latency, 1))
+        raw_idx = jax.random.randint(gen_key, (batch_size,), 0, valid_len)
+        boundary = pos - max_latency
+        idx = jnp.where(full & (raw_idx >= boundary), raw_idx + 2 * max_latency, raw_idx)
         
         batch = ReplayBufferSamplesJAX(
             observations= buf[idx, 0, :obs_dim],

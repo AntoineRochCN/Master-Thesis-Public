@@ -190,11 +190,14 @@ def solve_constrained_oracle_pf(prices, cost, leverage, initial_capital=1.0):
     
     return jnp.concatenate([jnp.array([0.0]), states]), jnp.concatenate([jnp.array([1.0]), pf_vals])
 
-@jax.jit
-def reset_step_carry(env: EnvDataBinance, key: jax.Array):
+@partial(jax.jit, static_argnames=["compute_oracle"])
+def reset_step_carry(env: EnvDataBinance, key: jax.Array, compute_oracle: bool = True):
     new_curve, key = curve_generator(env.data, env.ep_length, key)
     new_curve = normalize_curve(new_curve)
-    opt_pf_states, opt_pf_arr = solve_constrained_oracle_pf(new_curve[:,0], env.transaction_cost, env.leverage)
+    if compute_oracle:
+        opt_pf_states, opt_pf_arr = solve_constrained_oracle_pf(new_curve[:,0], env.transaction_cost, env.leverage)
+    else:
+        opt_pf_states, opt_pf_arr = env.step_carry.opt_pf_states, env.step_carry.opt_pf_arr
     current_obs = jnp.hstack([new_curve[0], (new_curve[0, 0] + new_curve[0, 5])/2, (new_curve[0, 0] + new_curve[0, 5])/2, 0.0, 1.0, 0.0, 1.0-env.stop_loss, env.stop_limit-1.0]).reshape(1,-1)
     step_carry = env.step_carry.replace(timestep=1, timestep_entry=0, curve=new_curve, current_obs=current_obs, state = 0.0, pf_value = 1.0, opt_pf_arr = opt_pf_arr, opt_pf_states = opt_pf_states)
 

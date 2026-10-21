@@ -119,11 +119,11 @@ class DADAC(delayed_SAC_wrapper):
             ratio1 = jnp.clip(new_means_std[0] ** 2 / (q1_std_detach ** 2 + bias), 0.1,10)
             ratio2 = jnp.clip(new_means_std[1] ** 2 / (q2_std_detach ** 2 + bias), 0.1,10)
             
-            q1_loss = (ratio1 * (optax.losses.huber_loss(current_q_values[0,:,0] , target_Q_values, 50) + 
-                       q1_std * (q1_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[0,:,0]), target_q_bound_1, 50)) / (q1_std_detach + bias))).mean()
+            q1_loss = (ratio1 * (optax.losses.huber_loss(current_q_values[0,:,0] , target_Q_values, delta=50.0) + 
+                       q1_std * (q1_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[0,:,0]), target_q_bound_1, delta=50.0)) / (q1_std_detach + bias))).mean()
             
-            q2_loss = (ratio2 * (optax.losses.huber_loss(current_q_values[1,:,0] , target_Q_values, 50) + 
-                       q2_std * (q2_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[1,:,0]), target_q_bound_2, 50)) / (q2_std_detach + bias))).mean()
+            q2_loss = (ratio2 * (optax.losses.huber_loss(current_q_values[1,:,0] , target_Q_values, delta=50.0) + 
+                       q2_std * (q2_std_detach**2 - optax.losses.huber_loss( jax.lax.stop_gradient(current_q_values[1,:,0]), target_q_bound_2, delta=50.0)) / (q2_std_detach + bias))).mean()
             
             
             return q1_loss + q2_loss , (new_means_std, current_q_values[:,:,0].mean())
