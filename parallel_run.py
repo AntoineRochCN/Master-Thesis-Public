@@ -56,7 +56,7 @@ def run_sim(caso, seed, dist_obs, env_name, dist_obs_kwargs, dist_act, dist_act_
 
 
 def arg_maker(caso):
-    seed_list = [12345,22345,32345,42355,52345]
+    seed_list = [12345, 22345, 32345, 42355, 52345]
     env_names = ["Walker2d-v4", "Hopper-v4"]
     n_timestep = [10**6]
     match caso:
@@ -67,54 +67,99 @@ def arg_maker(caso):
             dist_obs_kwargs = [{"delta_max": 6, "mean": 2}]
             dist_act = ["test"]
             dist_act_kwargs = [{}]
-            algo_nums = [0,1,2,3]
+            algo_nums = [0, 1, 2, 3]
             env = env_names
             n_timestep = [10**4]
 
-        ### Example of a simulation
+        ### Gamma latency simulation
         case 1: 
             dist_obs = ["gamma"]
             dist_obs_kwargs = [{"delta_max": 6, "mean": 2}]
             dist_act = ["test"]
             dist_act_kwargs = [{}]
-            algo_nums = [0,1,2,3]
+            algo_nums = [0, 1, 2, 3]
             env = env_names
+
+        ### Uniform latency simulation
+        case 2:
+            dist_obs = ["uniform"]
+            dist_obs_kwargs = [{"delta_max": 6}]
+            dist_act = ["test"]
+            dist_act_kwargs = [{}]
+            algo_nums = [0, 1, 2, 3]
+            env = env_names
+
+        ### Gaussian mixture latency simulation
+        case 3:
+            dist_obs = ["gaussian"]
+            dist_obs_kwargs = [{"delta_max": 6, "vec_mean": [2.0, 4.0], "vec_std": [0.5, 0.5]}]
+            dist_act = ["test"]
+            dist_act_kwargs = [{}]
+            algo_nums = [0, 1, 2, 3]
+            env = env_names
+
+        case _:
+            raise ValueError(f"Unknown case number: {caso}. Available: 0, 1, 2, 3")
         
     args = list(product(algo_nums, seed_list, dist_obs, env, dist_obs_kwargs, dist_act, dist_act_kwargs, n_timestep, [caso]))
 
     return args
 
 if __name__ == '__main__':
-    caso = eval(input("Case: "))
+    import argparse
+    parser = argparse.ArgumentParser(description="Run DADAC and comparison RL simulations")
+    parser.add_argument("--case", type=int, default=None, help="Simulation case (0: debug, 1: gamma, 2: uniform, 3: gaussian)")
+    parser.add_argument("--cuda", type=int, choices=[0, 1], default=None, help="Use CUDA (1) or CPU (0)")
+    parser.add_argument("--threads", type=int, default=None, help="Number of parallel worker processes")
+    cli_args = parser.parse_args()
+
+    if cli_args.case is not None:
+        caso = cli_args.case
+    else:
+        caso = int(input("Case (0: debug, 1: gamma, 2: uniform, 3: gaussian): ").strip() or "0")
+
     args = arg_maker(caso)
     print("Number of distinct simulations: ", len(args))
     print("Parametrizations: ")
     for arg in args:
         print(arg)
-    use_cuda = eval(input("Use cuda (0/1): "))
+
+    if cli_args.cuda is not None:
+        use_cuda = cli_args.cuda
+    else:
+        use_cuda = int(input("Use cuda (0/1): ").strip() or "1")
+
     if use_cuda == 0:
-        import os
         os.environ["XLA_FLAGS"] = (
             "--xla_cpu_multi_thread_eigen=true "
             "intra_op_parallelism_threads=1 "
             "inter_op_parallelism_threads=1"
-            )
+        )
         os.environ["OMP_NUM_THREADS"] = "1"
         os.environ["MKL_NUM_THREADS"] = "1"
         os.environ["JAX_PLATFORMS"] = "cpu"
-        import jax
+        try:
+            jax.config.update("jax_platform_name", "cpu")
+        except Exception:
+            pass
     elif use_cuda == 1:
         pass
     else:
         assert False, "Not a good cuda value, ending the program"
 
-    n_thread = eval(input("Number of parallel simulations: "))
+    if cli_args.threads is not None:
+        n_thread = cli_args.threads
+    else:
+        n_thread = int(input("Number of parallel simulations: ").strip() or "1")
     
+    save_path = f"./parallel_runs/sim_number_{caso}/"
+    os.makedirs(save_path, exist_ok=True)
+
     mp.set_start_method('spawn')
     with mp.Pool(n_thread) as p:
         result = p.starmap(run_sim, args)
 
-    with open("./parallel_runs/sim_number_{}/results.json".format(caso), 'w') as file:
+    with open(os.path.join(save_path, "results.json"), 'w') as file:
         json.dump(result, file)
 
     print("End of case ", caso)

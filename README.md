@@ -20,17 +20,21 @@
 
   ## Quick Start
 
-  1.  **Collect Data**: Scrape and process Binance data.
+  1.  **Prepare Data**: Either generate synthetic test data immediately:
+      ```bash
+      python data/generate_dummy_data.py
+      ```
+      Or scrape and process live Binance data:
       ```bash
       cd data/scrapper
       python python_scrapper.py
       cd ..
-      python transform_scrapped_data.py -n my_beautiful_data
+      python transform_scrapped_data.py -n transformed_train_data
       ```
   2.  **Train Models**: Run the comparison script.
       ```bash
       cd custom_env
-      python algo_comparison_JAX.py
+      python algo_comparison_JAX.py --case 0 --cuda 1 --threads 1
       ```
   3.  **Train Final Agent**: Train a specific DADAC model.
       ```bash
@@ -145,8 +149,9 @@
   For the C++ scrapper:
   ```bash
   cd data/scrapper
-  cmake .
-  make scrapper_exec
+  mkdir -p build && cd build
+  cmake ..
+  make -j
   ./scrapper_exec 
   ```
   For the Python scrapper:

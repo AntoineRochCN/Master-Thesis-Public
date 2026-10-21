@@ -64,17 +64,19 @@ def rollout_for_test(env_test: EnvDataBinance, actor_state, latency_manager_test
 
         cumulated_reward = cumulated_reward + reward[0] * (1-past_done)
         pf_value = new_obs[0, 16] * (1-past_done) + pf_value * past_done
-        market_val = (new_obs[0, 0] / 100 + 1) * (1-past_done) + pf_value * past_done
+        market_val = (new_obs[0, 0] / 100 + 1) * (1-past_done) + (new_obs[0, 0] / 100 + 1) * past_done
         
         return (step_carry, latency_manager_test, done_or_trunc | past_done, cumulated_reward, current_ep_len + (1-past_done), pf_value), (pf_value, market_val)
     
     (step_carry, latency_manager_test, done, final_reward, ep_len, pf_value), (pf_vals, raw_rets) = lax.scan(scan_body, (step_carry, latency_manager_test, False, 0.0, 0.0, 1.0), all_keys)
     
-    mean = jnp.sum(pf_vals - raw_rets) / ep_len
-    mean_2 = jnp.sum((pf_vals - raw_rets) ** 2) / ep_len
-    
-    sharpe =  mean / (mean_2 - mean**2) ** 0.5 
-    ratio_to_opt = pf_value / (step_carry.opt_pf_states[-1] / 100 + 1)
+    ep_len_safe = jnp.maximum(ep_len, 1.0)
+    mean = jnp.sum(pf_vals - raw_rets) / ep_len_safe
+    mean_2 = jnp.sum((pf_vals - raw_rets) ** 2) / ep_len_safe
+    variance = jnp.maximum(mean_2 - mean**2, 1e-8)
+    sharpe = mean / jnp.sqrt(variance)
+    opt_val = jnp.maximum(step_carry.opt_pf_states[-1] / 100 + 1, 1e-8)
+    ratio_to_opt = pf_value / opt_val
 
     step_carry = reset_step_carry(env_test, reset_key)
     latency_manager_test, _, _ = reset_latency_env(latency_manager_test, step_carry.current_obs)

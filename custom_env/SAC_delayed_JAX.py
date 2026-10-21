@@ -202,11 +202,11 @@ class SAC_delayed_JAX(SAC):
             past_entropy = carry.entropy
             data, key = buffer.sample(buffer.buffer, batch_size, buffer.pos, key, discounts, obs_dim, buffer.full, buffer.buffer_size)
             
-            batch_obs = jax.lax.dynamic_slice_in_dim(data.observations, batch_size, batch_size)
-            batch_actions = jax.lax.dynamic_slice_in_dim(data.actions, batch_size, batch_size)
-            batch_next_obs = jax.lax.dynamic_slice_in_dim(data.next_observations, batch_size , batch_size)
-            batch_rewards = jax.lax.dynamic_slice_in_dim(data.rewards, batch_size, batch_size)
-            batch_dones = jax.lax.dynamic_slice_in_dim(data.dones, batch_size, batch_size)
+            batch_obs = jax.lax.dynamic_slice_in_dim(data.observations, 0, batch_size)
+            batch_actions = jax.lax.dynamic_slice_in_dim(data.actions, 0, batch_size)
+            batch_next_obs = jax.lax.dynamic_slice_in_dim(data.next_observations, 0, batch_size)
+            batch_rewards = jax.lax.dynamic_slice_in_dim(data.rewards, 0, batch_size)
+            batch_dones = jax.lax.dynamic_slice_in_dim(data.dones, 0, batch_size)
             batch_discounts = discounts
 
             (

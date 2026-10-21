@@ -77,8 +77,8 @@ class DSAC(delayed_SAC_wrapper):
 
         idx_min = jnp.argmin(qf_next_values[..., 0], axis=0)
 
-        target_Q_values =  jax.lax.stop_gradient(qf_next_values[idx_min, jnp.arange(qf_next_values.shape[1])[:, None], 0])
-        target_Z_values = normal_values[idx_min, jnp.arange(qf_next_values.shape[1])[:, None]]
+        target_Q_values =  jax.lax.stop_gradient(qf_next_values[idx_min, jnp.arange(qf_next_values.shape[1]), 0])
+        target_Z_values = normal_values[idx_min, jnp.arange(qf_next_values.shape[1])]
 
         target_Z_values = target_Z_values - C1
         target_Z_values = rewards + C2 * target_Z_values

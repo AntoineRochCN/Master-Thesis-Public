@@ -152,17 +152,39 @@ def arg_maker(caso):
     return args
 
 if __name__ == '__main__':
-    caso = eval(input("Case: "))
-    use_cuda = eval(input("Use cuda (0/1): "))
+    import argparse
+    parser = argparse.ArgumentParser(description="Run JAX algorithm comparison")
+    parser.add_argument("--case", type=int, default=None, help="Case (0: debug, 1: extended, 2: restricted)")
+    parser.add_argument("--cuda", type=int, choices=[0, 1], default=None, help="Use CUDA (1) or CPU (0)")
+    parser.add_argument("--threads", type=int, default=None, help="Number of worker threads")
+    cli_args = parser.parse_args()
+
+    if cli_args.case is not None:
+        caso = cli_args.case
+    else:
+        caso = int(input("Case (0: debug, 1: extended, 2: restricted): ").strip() or "0")
+
+    if cli_args.cuda is not None:
+        use_cuda = cli_args.cuda
+    else:
+        use_cuda = int(input("Use cuda (0/1): ").strip() or "1")
+
     if use_cuda == 0:
-        import os
         os.environ["JAX_PLATFORMS"] = "cpu"
-        import jax
+        try:
+            import jax
+            jax.config.update("jax_platform_name", "cpu")
+        except Exception:
+            pass
     elif use_cuda == 1:
         pass
     else:
         assert False, "Not a good cuda value, ending the program"
-    n_thread = eval(input("Number of threads: "))
+
+    if cli_args.threads is not None:
+        n_thread = cli_args.threads
+    else:
+        n_thread = int(input("Number of threads: ").strip() or "1")
 
     args = arg_maker(caso)
     
@@ -171,11 +193,14 @@ if __name__ == '__main__':
     for arg in args:
         print(arg)
 
+    save_dir = f"./algo_comparison/sim_number_{caso}/"
+    os.makedirs(save_dir, exist_ok=True)
+
     mp.set_start_method('spawn')
     with mp.Pool(n_thread) as p:
         result = p.starmap(run_sim, args)
 
-    with open("./algo_comparison/sim_number_{}/results.json".format(caso), 'w') as file:
+    with open(os.path.join(save_dir, "results.json"), 'w') as file:
         json.dump(result, file)
 
     print("End of case ", caso)

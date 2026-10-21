@@ -187,8 +187,8 @@ class DADAC(delayed_SAC_wrapper):
             batch_obs = jax.lax.dynamic_slice_in_dim(data.observations, i * batch_size, batch_size)
             batch_actions = jax.lax.dynamic_slice_in_dim(data.actions, i * batch_size, batch_size)
             batch_next_obs = jax.lax.dynamic_slice_in_dim(data.next_observations, i * batch_size , batch_size).reshape((batch_size*(max_latency+1), -1))
-            batch_rewards = jax.lax.dynamic_slice_in_dim(data.rewards, i * batch_size, batch_size*(max_latency+1)).reshape((batch_size, (max_latency+1)))
-            batch_dones = jax.lax.dynamic_slice_in_dim(data.dones, i * batch_size, batch_size*(max_latency+1)).reshape((batch_size, (max_latency+1)))
+            batch_rewards = jax.lax.dynamic_slice_in_dim(data.rewards, i * batch_size * (max_latency + 1), batch_size*(max_latency+1)).reshape((batch_size, (max_latency+1)))
+            batch_dones = jax.lax.dynamic_slice_in_dim(data.dones, i * batch_size * (max_latency + 1), batch_size*(max_latency+1)).reshape((batch_size, (max_latency+1)))
             batch_discounts = jax.lax.dynamic_slice_in_dim(data.discounts, i * batch_size, batch_size)
             batch_latencies = jnp.array(latence_probabilities, copy = False)
             (
@@ -285,8 +285,11 @@ class DADAC(delayed_SAC_wrapper):
         else:
             self.discounts = data.discounts.reshape(-1)
 
-        if self.latency_probabilities.shape != (batch_size, self.max_latency + 1):
-            self.latency_probabilities = jnp.tile(self.latency_probabilities, (batch_size, 1))
+        lat_probs = self.latency_probabilities
+        if lat_probs.ndim == 1:
+            lat_probs = jnp.tile(lat_probs, (batch_size, 1))
+        elif lat_probs.shape[0] != batch_size:
+            lat_probs = jnp.tile(lat_probs[0], (batch_size, 1))
             
         data = self._convert_to_jax_tuple(data.observations, data.actions, data.next_observations, data.dones, data.rewards, self.discounts)
         
@@ -308,7 +311,7 @@ class DADAC(delayed_SAC_wrapper):
             self.ent_coef_state,
             self.key,
             self.max_latency, 
-            self.latency_probabilities,
+            lat_probs,
             self.past_std
             )
 

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "master-thesis-rl-latency"
+version = "0.1.0"
+description = "Managing latencies in Reinforcement Learning using DADAC and SAC variants"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium[mujoco]>=1.0.0",
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+    "flax>=0.8.0",
+    "optax>=0.2.0",
+    "stable_baselines3>=2.2.0",
+    "sbx_rl>=0.1.0",
+    "tensorflow_probability>=0.23.0",
+    "torch>=2.2.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+    "pandas>=2.0.0",
+    "matplotlib>=3.8.0",
+    "scikit-learn>=1.2.0",
+    "tensorboard>=2.15.0",
+    "websockets>=12.0",
+    "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools]
+py-modules = ["DADAC", "DSAC", "SAC_delayed", "SAC_VC", "utils_SAC", "utils_env", "utils_backtest", "parallel_run", "backtest_run"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["custom_env*"]

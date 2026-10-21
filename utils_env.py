@@ -141,7 +141,7 @@ class LatencyEnv(gym.Wrapper):
 
         self.t_start = tau[0] + tau_prime[0]
         
-        self.mask_next_observations = np.zeros(n_max + self.max_latency_action + self.max_latency_observation + 3, dtype=np.bool)
+        self.mask_next_observations = np.zeros(n_max + self.max_latency_action + self.max_latency_observation + 3, dtype=bool)
 
         self.next_obs_shift = np.arange(n_max) + tau + tau_prime + 1
 
@@ -491,6 +491,7 @@ class CustomEvalCallback(EvalCallback):
             res = env.reset()
             first_it = True
             info_ret = {"flag_compute_action": False, "observation": np.array(res[0]).reshape(-1)}
+            obs = info_ret["observation"]
             done = False
             while not done:
                 if info_ret["flag_compute_action"]:

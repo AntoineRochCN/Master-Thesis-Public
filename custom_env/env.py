@@ -1,4 +1,5 @@
 from functools import partial
+from typing import NamedTuple
 import gymnasium as gym
 from gymnasium.spaces import Box
 import numpy as np
@@ -169,8 +170,8 @@ def solve_constrained_oracle_pf(prices, cost, leverage, initial_capital=1.0):
     def backward_step(val_next, W):
         v_long, v_short = W
         x = val_next[None, :] * jnp.asarray([[1.0, 1.0 + leverage *(v_long - cost), 1.0 + leverage * (v_short - cost)], 
-                                           [1.0 - leverage * cost, 1.0 + leverage * v_long, -jnp.inf], 
-                                           [1.0 - leverage * cost, -jnp.inf, 1.0 + leverage * v_short]])
+                                           [1.0 + leverage * (v_long - cost), 1.0 + leverage * v_long, -jnp.inf], 
+                                           [1.0 + leverage * (v_short - cost), -jnp.inf, 1.0 + leverage * v_short]])
         return jnp.max(x, axis=1), jnp.argmax(x, axis=1)
     
     init_val = jnp.ones(3)
@@ -181,8 +182,8 @@ def solve_constrained_oracle_pf(prices, cost, leverage, initial_capital=1.0):
         best_choice, v_long, v_short = items_bis
         next_state_idx = best_choice[curr_state_idx]
         new_pf_val = pf_val * jnp.asarray([[1.0, 1.0 + leverage *(v_long - cost), 1.0 + leverage * (v_short - cost)], 
-                                           [1.0 - leverage * cost, 1.0 + leverage * v_long, -jnp.inf], 
-                                           [1.0 - leverage * cost, -jnp.inf, 1.0 + leverage * v_short]])[curr_state_idx, next_state_idx]
+                                           [1.0 + leverage * (v_long - cost), 1.0 + leverage * v_long, -jnp.inf], 
+                                           [1.0 + leverage * (v_short - cost), -jnp.inf, 1.0 + leverage * v_short]])[curr_state_idx, next_state_idx]
         return (next_state_idx, new_pf_val), (next_state_idx, new_pf_val)
     
     _, (states, pf_vals) = jax.lax.scan(forward_step, (0, 1.0), (best_choices, r_long, r_short), unroll=10)
@@ -334,7 +335,7 @@ class JaxLatencyEnv:
         
         buffer_latency = jnp.zeros((buffer_length, action_dim + obs_dim*2 + 2), dtype=jnp.float32)
 
-        carry = CarryLatency(timestep=0, ret_ind=0, buffer_latency=buffer_latency, mask_return=jnp.zeros(buffer_length, dtype=jnp.bool), past_action=jnp.zeros(action_dim, dtype=jnp.int32), 
+        carry = CarryLatency(timestep=0, ret_ind=0, buffer_latency=buffer_latency, mask_return=jnp.zeros(buffer_length, dtype=bool), past_action=jnp.zeros(action_dim, dtype=jnp.int32), 
                              mask_actions=None, action_shift=None, mask_next_observations=None, next_obs_shift=None, past_obs=jnp.zeros(obs_dim), new_obs_positions=None)
 
         latency_env = cls(latency_range_action = latency_range_action, latency_probabilities_action = latency_probabilities_action, max_latency_action = max_latency_action,
@@ -353,8 +354,8 @@ def mask_generator(LatencyEnv: JaxLatencyEnv):
     tau = jax.random.choice(tau_key, LatencyEnv.latency_range_action, p = LatencyEnv.latency_probabilities_action, shape=(n_max,))
     tau_prime = jax.random.choice(taup_key, LatencyEnv.latency_range_observation, p = LatencyEnv.latency_probabilities_observation, shape=(n_max,))
         
-    mask_actions = jnp.zeros(n_max + LatencyEnv.max_latency_action + 2, dtype=jnp.bool)
-    mask_next_observations = jnp.zeros(n_max + LatencyEnv.max_latency_action + LatencyEnv.max_latency_observation + 3, dtype=jnp.bool)
+    mask_actions = jnp.zeros(n_max + LatencyEnv.max_latency_action + 2, dtype=bool)
+    mask_next_observations = jnp.zeros(n_max + LatencyEnv.max_latency_action + LatencyEnv.max_latency_observation + 3, dtype=bool)
 
     action_shift = np.arange(n_max) + tau + 1
     next_obs_shift = np.arange(n_max) + tau + tau_prime + 1

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import signal
+from pathlib import Path
 import websockets
 
 keep_running = True
@@ -20,8 +21,9 @@ async def main():
     target = "/ws/btcusdt@depth5@100ms/btcusdt@kline_1s"
     uri = f"wss://{host}:{port}{target}"
 
-    output_path = "scrapper_out.csv"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path = Path("scrapper_out.csv")
+    if output_path.parent != Path("."):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
     counter = 0
 

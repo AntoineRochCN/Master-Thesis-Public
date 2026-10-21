@@ -4,12 +4,17 @@ import numpy as np
 import websockets
 import json
 import os
-os.chdir("./custom_env")
+import sys
+from pathlib import Path
+import shutil
+
+_repo_root = str(Path(__file__).resolve().parent)
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
 from custom_env.DADAC_JAX import DADAC_JAX
 from custom_env.env import solve_constrained_oracle_pf, foolish_env
-os.chdir("../")
 import jax
-import os
 import gymnasium as gym
 import time
 import hmac
@@ -25,10 +30,15 @@ from sklearn.neighbors import KernelDensity
 
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
 
+_trapezoid = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
 
-plt.rcParams.update({
-    "text.usetex": True
-})
+if shutil.which("latex") and shutil.which("dvipng"):
+    try:
+        plt.rcParams.update({"text.usetex": True})
+    except Exception:
+        plt.rcParams.update({"text.usetex": False})
+else:
+    plt.rcParams.update({"text.usetex": False})
 
 class ManualMarginTrader:
     def __init__(self, api_key, secret_key):
@@ -126,7 +136,7 @@ class policy:
         elif kind == "inactive":
             self.predict = self.predict_inactive
         else:
-            raise "Not a correct policy"
+            raise ValueError(f"Unknown policy kind: {kind}")
         
         self.trade_counter = 0
         
@@ -227,7 +237,10 @@ class Backtester():
         np.random.seed(seed)
         data = pd.read_csv(path).to_numpy()
         arr = []
-        idx = np.random.randint(0, data.shape[0]) + np.arange((self.max_ep_length+1 + self.max_window_length)*20)
+        needed_len = (self.max_ep_length + 1 + self.max_window_length) * 20
+        max_start = max(1, data.shape[0] - needed_len)
+        start_idx = np.random.randint(0, max_start)
+        idx = start_idx + np.arange(min(needed_len, data.shape[0] - start_idx))
         for pos in idx:
             if data[pos, 2] == 0:
                 arr.append(data[pos, 3:23].reshape((2,5,2)))
@@ -628,9 +641,9 @@ def plot_bench_latency(load_path, save_path):
 
     x_discretized = (x + 50) //100
 
-    density_discretized = np.array([abs(np.trapz(density[x_discretized == k], x = x[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
+    density_discretized = np.array([abs(_trapezoid(density[x_discretized == k], x = x[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
 
-    C = np.trapz(density,  x= x / 100 + 1)
+    C = _trapezoid(density,  x= x / 100 + 1)
 
     plt.plot(x / 100, density / C,  c = 'r', label = "Smoothed distribution using KDE")
     plt.bar(np.arange(len(density_discretized)), height = density_discretized, width = 0.8, label = "Discretized latency distribution")
@@ -669,12 +682,12 @@ def plot_bench_latency(load_path, save_path):
     density_act = np.exp(kde_act.score_samples(x_grid.reshape(-1,1)))
 
     discrete_grid = x_grid/100
-    C_obs = np.trapz(density_obs, x = discrete_grid)
-    C_act = np.trapz(density_act, x = discrete_grid)
+    C_obs = _trapezoid(density_obs, x = discrete_grid)
+    C_act = _trapezoid(density_act, x = discrete_grid)
 
     x_discretized = (x_grid + 50) //100
-    density_discretized_obs = np.array([abs(np.trapz(density_obs[x_discretized == k], x = x_grid[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
-    density_discretized_act = np.array([abs(np.trapz(density_act[x_discretized == k], x = x_grid[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
+    density_discretized_obs = np.array([abs(_trapezoid(density_obs[x_discretized == k], x = x_grid[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
+    density_discretized_act = np.array([abs(_trapezoid(density_act[x_discretized == k], x = x_grid[x_discretized == k])) for k in range(int(x_discretized[-1]) + 1)])
 
     plt.plot(discrete_grid, density_obs / C_obs, label = "Smoothed observation latency")
     plt.plot(discrete_grid, density_act / C_act, label = "Smoothed action latency")

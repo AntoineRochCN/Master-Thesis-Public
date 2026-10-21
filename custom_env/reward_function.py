@@ -8,11 +8,11 @@ def reward_function(current, past, init, action, state, pf_value, truncated, cur
     past = past
     init = init
     
-    ratio_fwd = (current - past) / (init + 100) * pf_value * leverage
-    ratio_inv = (init + 100) * (past - current) / ((current + 100) * (past + 100))* pf_value * leverage
-    M = 1.0 + leverage * jnp.array([[0.0, - transaction_cost + ratio_fwd, - transaction_cost + ratio_inv], 
-                                    [- transaction_cost + ratio_fwd, ratio_fwd, -jnp.inf], 
-                                    [- transaction_cost + ratio_inv, -jnp.inf, ratio_inv]])
+    ratio_fwd = (current - past) / (past + 100.0)
+    ratio_inv = (past - current) / (current + 100.0)
+    M = 1.0 + leverage * jnp.array([[0.0, ratio_fwd - transaction_cost, ratio_inv - transaction_cost], 
+                                    [ratio_fwd - transaction_cost, ratio_fwd, -jnp.inf], 
+                                    [ratio_inv - transaction_cost, -jnp.inf, ratio_inv]])
     new_pf_value = pf_value * M[jnp.astype(state, jnp.int32), jnp.astype(action, jnp.int32)]
     
     done = truncated | (new_pf_value >= stop_limit) | (new_pf_value <= stop_loss)

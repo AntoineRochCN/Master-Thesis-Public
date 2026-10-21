@@ -93,14 +93,21 @@ def global_np_writer(df):
 
 
 if __name__ == '__main__':
-    args = sys.argv[1:]
-    
-    if "-n" in args[0]:
-        out_name = args[1]
-    else:
-        out_name = "transformed_data"
+    import argparse
+    import os
+    from pathlib import Path
 
-    path = "scrapper/scrapper_out.csv"
-    df = pd.read_csv(path)
+    default_data_dir = Path(__file__).resolve().parent
+    default_input = default_data_dir / "scrapper" / "scrapper_out.csv"
+
+    parser = argparse.ArgumentParser(description="Transform scraped Binance WebSocket CSV data to NumPy format")
+    parser.add_argument("-n", "--name", default="transformed_data", help="Output filename (without extension)")
+    parser.add_argument("-i", "--input", default=str(default_input), help="Input CSV path")
+    parser.add_argument("-o", "--output-dir", default=str(default_data_dir), help="Output directory")
+    cli_args = parser.parse_args()
+
+    df = pd.read_csv(cli_args.input)
     ret = global_np_writer(df)
-    np.save( out_name + ".npy", ret)
+    out_path = Path(cli_args.output_dir) / f"{cli_args.name}.npy"
+    np.save(str(out_path), ret)
+    print(f"Saved transformed data with shape {ret.shape} to {out_path}")

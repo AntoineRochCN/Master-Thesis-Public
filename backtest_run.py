@@ -36,6 +36,7 @@ def backtest(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverage, 
     time_of_flight_rec_arr = np.array(time_of_flight_rec_arr)
 
     file_name = "./backtest/backtest/" + experience_name + ".pkl"
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
     with open(file_name, "wb") as f:
@@ -70,6 +71,7 @@ def offline_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, levera
     time_of_flight_rec_arr = np.array(time_of_flight_rec_arr)
 
     file_name = "./backtest/offline_test/" + experience_name  + ".pkl"
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
     with open(file_name, "wb") as f:
@@ -104,6 +106,7 @@ def online_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverag
     time_of_flight_rec_arr = np.array(time_of_flight_rec_arr)
 
     file_name = "./backtest/online_test/" + experience_name  + ".pkl"
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     output_dict = {"actions" : act_rec_arr, "observations": obs_rec_arr, "timestamps": timestamp_rec_arr, "fly_time": time_of_flight_rec_arr, "durations": durations, "ref": ref}
 
     with open(file_name, "wb") as f:
@@ -111,7 +114,7 @@ def online_test(policy_type: str, policy_kwargs, max_ep_length, N_tests, leverag
 
     plot_benchmark(file_name, "./backtest/online_test/" + experience_name  + '.png', fees=0.075/100)
 
-def bench_latency(max_trade_num ,policy_kwargs, experience_name):
+def bench_latency(max_trade_num, policy_kwargs, experience_name, leverage=1.0):
     test_type = "online"
     policy_type = "benchmark"
     data_kwargs = {}
@@ -121,28 +124,30 @@ def bench_latency(max_trade_num ,policy_kwargs, experience_name):
     act_rec, obs_rec, timestamp_rec, time_of_flight, ref = asyncio.run(obj.run())
 
     file_name = "./backtest/benchmark/" + experience_name  + ".pkl"
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     output_dict = {"actions" : act_rec, "observations": obs_rec, "timestamps": timestamp_rec, "fly_time": time_of_flight, "ref": ref}
 
     with open(file_name, "wb") as f:
         pickle.dump(output_dict, f)
 
-    plot_benchmark(file_name, "./backtest/benchmark/" + experience_name)
+    plot_benchmark(file_name, "./backtest/benchmark/" + experience_name + ".png", fees=0.075/100)
 
 
 if __name__ == '__main__':
-    test_case = eval(input("What to do? \n0: backtest\n1: offline testing\n2: online testing\n3: latency benchmark\n"))
+    test_case = int(input("What to do? \n0: backtest\n1: offline testing\n2: online testing\n3: latency benchmark\n").strip())
     
+    policy_type = "trained_policy"
     try:
-        policy_type = eval(input("\nWhich policy: (0, DADAC) (1, random) (2, unique - test) (3, inactive): ")) 
+        p_idx = int(input("\nWhich policy: (0, DADAC) (1, random) (2, unique - test) (3, inactive): ").strip())
         policy_arr = ["trained_policy", "random", "test_send_unique", 'inactive']
-        policy_type = policy_arr[policy_type]
-    except:
+        policy_type = policy_arr[p_idx]
+    except Exception:
         pass
     
-    ep_length = eval(input("Episode length (recommended: 1200): "))
-    N_tests = eval(input("Number of tests: "))
-    leverage = eval(input("Leverage: "))
-    experience_name = input("Save file: ")
+    ep_length = int(input("Episode length (recommended: 1200): ").strip() or "1200")
+    N_tests = int(input("Number of tests: ").strip() or "1")
+    leverage = float(input("Leverage: ").strip() or "1.0")
+    experience_name = input("Save file: ").strip() or "test_run"
 
     print("In case of using a DADAC model, be sure to provide a valid saved model path")
     saved_model_path = "./saved_models/model_test.msgpack"
@@ -158,4 +163,4 @@ if __name__ == '__main__':
         case 2:
             online_test(policy_type, policy_kwargs, ep_length, N_tests, leverage, experience_name)
         case 3:
-            bench_latency(ep_length, policy_kwargs, experience_name)
+            bench_latency(ep_length, policy_kwargs, experience_name, leverage=leverage)
